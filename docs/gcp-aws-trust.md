@@ -1,12 +1,39 @@
 # GCP → AWS trust policy
 
-AssumeKit does not provision IAM roles. Configure an AWS role that trusts the intended Google service account through AWS STS `AssumeRoleWithWebIdentity`.
+AssumeKit does not provision IAM roles. Configure an AWS role that trusts only the intended Google service account through AWS STS `AssumeRoleWithWebIdentity`.
 
-AWS supports Google as a built-in federated principal, so this flow does not require creating a custom IAM OIDC provider for `accounts.google.com`.
+AWS supports Google as a built-in federated principal for this flow, so you do not need to create a custom IAM OIDC provider for `accounts.google.com`.
+
+## Get the Google service-account unique ID
+
+Prefer retrieving the stable numeric service-account ID through the Google Cloud API/CLI instead of decoding and logging a live production ID token.
+
+```bash
+GCP_SERVICE_ACCOUNT_EMAIL="assumekit-runtime@example-project.iam.gserviceaccount.com"
+
+gcloud iam service-accounts describe "$GCP_SERVICE_ACCOUNT_EMAIL" \
+  --project "example-project" \
+  --format='value(uniqueId)'
+```
+
+Google documents `uniqueId` as the unique, stable numeric ID of the service-account resource. Use this numeric value in the AWS trust conditions rather than relying on the service-account email address.
+
+## Choose an audience
+
+Choose a stable, non-secret audience that is specific to the intended workload/role, for example:
+
+```text
+assumekit-prod-orders-api
+```
+
+The exact same audience must be used in:
+
+- `gcpMetadataIdentity({ audience: "..." })`
+- `accounts.google.com:oaud` in the AWS trust policy.
+
+Do not reuse one generic audience across unrelated trust relationships when a workload-specific value is practical.
 
 ## Recommended trust policy
-
-Use values from a decoded **non-production** Google service-account ID token to fill the placeholders below. Do not paste tokens into source control or public issues.
 
 ```json
 {
@@ -30,39 +57,75 @@ Use values from a decoded **non-production** Google service-account ID token to 
 }
 ```
 
-For Google service-account ID tokens, Google sets `azp` and `sub` to the service account's stable numeric unique ID. AWS maps Google's claims as follows:
+## Why `aud`, `oaud`, and `sub`?
+
+AWS documents special claim mapping for Google ID tokens when the token has an `azp` (authorized party) claim:
 
 - `accounts.google.com:aud` ← Google token `azp`
 - `accounts.google.com:oaud` ← Google token `aud`
 - `accounts.google.com:sub` ← Google token `sub`
 
-The `aud` value is the same value supplied to `gcpMetadataIdentity({ audience })`.
+For Google service-account ID tokens in this workload-identity flow, `azp` and `sub` identify the service account, while `aud` is the audience requested from the metadata server.
 
-## Why all three conditions?
+Using all three conditions binds the AWS role to both:
 
-Trusting `accounts.google.com` without claim restrictions is too broad. Restricting `azp`/`sub` binds the role to the intended Google service account, while restricting `oaud` prevents a token minted for a different audience from being replayed against this role.
+1. the intended Google service account; and
+2. a token minted for the intended AssumeKit trust relationship.
 
-Use the service account's **numeric unique ID**, not its email address, for the stable identity conditions.
+Trusting `accounts.google.com` without claim restrictions is too broad.
+
+## Create or update the role
+
+You can configure the trust policy in the AWS console, IaC, or AWS CLI. Example CLI commands:
+
+```bash
+aws iam create-role \
+  --role-name AssumeKitExample \
+  --assume-role-policy-document file://trust-policy.json
+```
+
+For an existing role:
+
+```bash
+aws iam update-assume-role-policy \
+  --role-name AssumeKitExample \
+  --policy-document file://trust-policy.json
+```
+
+The AWS CLI is a provisioning convenience only. AssumeKit does not require it in the Cloud Run runtime.
+
+## Trust policy vs permissions policy
+
+The trust policy allows the Google workload to obtain the role session. It does not grant access to the target AWS API.
+
+Attach a separate least-privilege permissions policy to the role for only the AWS actions/resources your workload requires.
+
+Do not solve a target-service `AccessDenied` error by broadening the trust policy. Diagnose whether the failure is at STS or at the target AWS service first.
 
 ## Cloud Run identity
 
 Attach a dedicated user-managed service account to the Cloud Run service. AssumeKit requests a short-lived Google-signed ID token from the metadata server; no Google service-account key file is required.
 
-The library requests the metadata token with `format=standard`, which omits project and instance details that AWS STS does not need.
+The library requests the metadata token with `format=standard`, which avoids extra project/instance details that AWS STS does not need.
 
 ## AWS STS endpoint
 
-AssumeKit uses the Regional AWS STS endpoint derived from the configured AWS region. This follows AWS guidance to prefer Regional STS endpoints for latency and resiliency.
+AssumeKit derives a Regional AWS STS endpoint from `region`. AWS recommends Regional STS endpoints where possible for resiliency and latency.
+
+The public API intentionally does not accept an arbitrary STS URL, and metadata/STS requests do not follow redirects.
 
 ## Privacy and logging
 
-`AssumeRoleWithWebIdentity` is recorded in AWS CloudTrail and can include the token subject and role session name. Prefer stable workload identifiers rather than human PII in `sessionName`.
+`AssumeRoleWithWebIdentity` is visible in AWS CloudTrail. Role session names and identity-related fields can appear in audit events.
 
-Never use real account IDs, role ARNs, tokens, service-account emails, or customer data in public bug reports.
+- Prefer non-PII workload/session identifiers.
+- Never log Google ID tokens or AWS temporary credentials.
+- Never paste production tokens into public issues to troubleshoot claim mismatches.
 
 ## Primary references
 
-- AWS Security Blog: "Access AWS using a Google Cloud Platform native workload identity"
-- AWS IAM documentation: IAM and AWS STS condition context keys
-- Google Cloud documentation: Token types / service-account ID token claims
-- AWS IAM documentation: AWS STS Regional endpoints
+- AWS Security Blog — Access AWS using a Google Cloud Platform native workload identity: https://aws.amazon.com/blogs/security/access-aws-using-a-google-cloud-platform-native-workload-identity/
+- AWS IAM — condition context keys for Google federation: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html
+- AWS IAM — AWS STS Regions and endpoints: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
+- Google Cloud IAM — service-account `uniqueId`: https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts
+- Google Cloud Run — service identity: https://cloud.google.com/run/docs/securing/service-identity

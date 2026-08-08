@@ -1,18 +1,24 @@
 import { createAwsFetch, gcpMetadataIdentity } from "assumekit";
 
-const roleArn = process.env.AWS_ROLE_ARN;
-if (!roleArn) throw new Error("AWS_ROLE_ARN is required");
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
 
 const awsFetch = createAwsFetch({
-  roleArn,
-  region: process.env.AWS_REGION ?? "ap-northeast-1",
-  service: process.env.AWS_SERVICE ?? "execute-api",
+  roleArn: required("AWS_ROLE_ARN"),
+  region: required("AWS_REGION"),
+  service: required("AWS_SERVICE"),
   identity: gcpMetadataIdentity({
-    audience: process.env.AWS_OIDC_AUDIENCE ?? "assumekit",
+    audience: required("AWS_OIDC_AUDIENCE"),
   }),
 });
 
-const response = await awsFetch(
-  "https://example.execute-api.ap-northeast-1.amazonaws.com/health",
-);
-console.log(response.status, await response.text());
+const response = await awsFetch(required("AWS_ENDPOINT"));
+
+if (!response.ok) {
+  throw new Error(`AWS request failed: ${response.status}`);
+}
+
+console.log(`AWS request succeeded: ${response.status}`);
