@@ -1,5 +1,7 @@
 # Contributing
 
+[日本語](CONTRIBUTING.ja.md)
+
 Thanks for helping improve AssumeKit.
 
 ## Before opening a pull request

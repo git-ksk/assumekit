@@ -1,15 +1,21 @@
 # AssumeKit documentation
 
+[日本語ドキュメント](README.ja.md)
+
 AssumeKit is currently focused on **Google Cloud Run → Google service-account ID token → AWS STS → temporary AWS credentials → SigV4 HTTP requests**.
 
 ## Guides
 
 | Guide | English | 日本語 |
 | --- | --- | --- |
+| Project overview / API | [README](../README.md) | [README](../README.ja.md) |
 | End-to-end setup | [Getting started](getting-started.md) | [セットアップガイド](getting-started.ja.md) |
 | AWS/GCP trust details | [GCP → AWS trust policy](gcp-aws-trust.md) | [GCP → AWS trust policy](gcp-aws-trust.ja.md) |
 | Troubleshooting | [Troubleshooting](troubleshooting.md) | [トラブルシューティング](troubleshooting.ja.md) |
 | Security boundaries | [Security model](security-model.md) | [セキュリティモデル](security-model.ja.md) |
+| Vulnerability reporting | [Security policy](../SECURITY.md) | [セキュリティポリシー](../SECURITY.ja.md) |
+| Contributing | [Contributing](../CONTRIBUTING.md) | [Contributing](../CONTRIBUTING.ja.md) |
+| Conduct | [Code of Conduct](../CODE_OF_CONDUCT.md) | [行動規範](../CODE_OF_CONDUCT.ja.md) |
 
 ## Recommended reading order
 
@@ -22,3 +28,7 @@ AssumeKit is currently focused on **Google Cloud Run → Google service-account 
 ## Current status
 
 AssumeKit is **early alpha**. The repository and documentation can be used to review and test the design, but the package is not published to npm yet. The first npm release is intentionally blocked on a real Cloud Run → AWS end-to-end test.
+
+## License
+
+The project is licensed under the MIT License. The authoritative license text is the root [LICENSE](../LICENSE); localized documentation does not replace it.

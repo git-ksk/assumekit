@@ -1,5 +1,7 @@
 # Security Policy
 
+[日本語](SECURITY.ja.md)
+
 ## Reporting a vulnerability
 
 Do not open a public issue containing credentials, ID tokens, temporary AWS credentials, production account IDs, private role ARNs, customer information, or actionable exploit details.
