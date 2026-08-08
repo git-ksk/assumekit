@@ -44,8 +44,15 @@ SigV4 fetch
 
 ## Install
 
+The npm package is **not published yet**. The first npm release will follow end-to-end validation against a real Cloud Run → AWS setup.
+
+For development, clone this repository and run:
+
 ```bash
-npm install aws-assumekit
+npm install
+npm run typecheck
+npm test
+npm run build
 ```
 
 ## Cloud Run example

@@ -17,6 +17,21 @@ Cloud Run から SigV4 保護された AWS エンドポイントを呼ぶ場合�
 
 AWS AssumeKit はこれを通常の `fetch()` に近い形へまとめます。
 
+## インストール
+
+npm パッケージは**まだ公開していません**。実際の Cloud Run → AWS 環境で E2E 検証した後に最初の npm リリースを行う予定です。
+
+開発時はリポジトリを clone して以下を実行します。
+
+```bash
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+## 使用イメージ
+
 ```ts
 import { createAwsFetch, gcpMetadataIdentity } from "aws-assumekit";
 
