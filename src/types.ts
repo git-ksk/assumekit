@@ -19,6 +19,8 @@ export interface CreateAwsFetchOptions {
   durationSeconds?: number;
   refreshBeforeMs?: number;
   stsEndpoint?: string;
+  /** Number of HTTP retries performed by the SigV4 client. Defaults to 0. */
+  retries?: number;
 }
 
 export type AwsFetch = (

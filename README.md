@@ -77,6 +77,7 @@ No `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` is required.
 - **Provider-neutral core** — GCP first; GitHub Actions, Azure, Kubernetes OIDC and other providers can follow.
 - **MCP-friendly, not MCP-only** — AWS MCP is a first-class use case, but the core works with ordinary SigV4 HTTP endpoints.
 - **Safe caching** — temporary credentials are held in memory and refreshed before expiration.
+- **No implicit retries** — signed HTTP retries default to `0`, avoiding accidental replay of non-idempotent MCP/API calls; opt in with `retries` when appropriate.
 
 ## AWS trust policy
 

@@ -38,6 +38,7 @@ const response = await awsFetch("https://example.amazonaws.com/");
 - sidecar / 常駐 proxy を増やさない
 - Cloud Run 上の既存 Node.js アプリへ直接組み込む
 - MCP 専用にはせず、SigV4 HTTP 全般を対象にする
+- 非冪等な POST の二重実行を避けるため、HTTP retry はデフォルト `0`
 - GCP から開始し、GitHub Actions / Azure / Kubernetes OIDC へ拡張可能な設計にする
 
 詳細は [README.md](README.md) を参照してください。

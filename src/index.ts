@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 
 export { gcpMetadataIdentity } from "./providers/gcp.js";
+export type { GcpMetadataIdentityOptions } from "./providers/gcp.js";
 export type {
   AwsFetch,
   AwsTemporaryCredentials,
@@ -24,15 +25,17 @@ function defaultSessionName(): string {
 export function createAwsFetch(options: CreateAwsFetchOptions): AwsFetch {
   const refreshBeforeMs = options.refreshBeforeMs ?? DEFAULT_REFRESH_BEFORE_MS;
   let credentials: AwsTemporaryCredentials | undefined;
+  let client: AwsClient | undefined;
   let refreshPromise: Promise<AwsTemporaryCredentials> | undefined;
 
-  async function getCredentials(): Promise<AwsTemporaryCredentials> {
+  async function getClient(): Promise<AwsClient> {
     const now = Date.now();
     if (
       credentials &&
+      client &&
       credentials.expiration.getTime() - refreshBeforeMs > now
     ) {
-      return credentials;
+      return client;
     }
 
     if (!refreshPromise) {
@@ -50,22 +53,23 @@ export function createAwsFetch(options: CreateAwsFetchOptions): AwsFetch {
 
     try {
       credentials = await refreshPromise;
-      return credentials;
+      client = new AwsClient({
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        sessionToken: credentials.sessionToken,
+        region: options.region,
+        service: options.service,
+        // Safe default for non-idempotent calls such as MCP POST requests.
+        retries: options.retries ?? 0,
+      });
+      return client;
     } finally {
       refreshPromise = undefined;
     }
   }
 
   return async (input, init) => {
-    const creds = await getCredentials();
-    const client = new AwsClient({
-      accessKeyId: creds.accessKeyId,
-      secretAccessKey: creds.secretAccessKey,
-      sessionToken: creds.sessionToken,
-      region: options.region,
-      service: options.service,
-    });
-
-    return client.fetch(input, init);
+    const aws = await getClient();
+    return aws.fetch(input, init);
   };
 }
