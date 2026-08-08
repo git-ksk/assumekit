@@ -156,6 +156,7 @@ export async function assumeRoleWithWebIdentity(
             "content-type": "application/x-www-form-urlencoded",
           },
           body: body.toString(),
+          redirect: "error",
         },
         timeoutMs,
         "AWS STS",

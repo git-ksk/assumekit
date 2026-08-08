@@ -31,8 +31,10 @@ describe("regionalStsEndpoint", () => {
 describe("assumeRoleWithWebIdentity", () => {
   it("uses regional STS and parses temporary credentials", async () => {
     const requests: string[] = [];
-    const fetchImpl: typeof fetch = async (input) => {
+    let requestInit: RequestInit | undefined;
+    const fetchImpl: typeof fetch = async (input, init) => {
       requests.push(String(input));
+      requestInit = init;
       return new Response(successXml(), { status: 200 });
     };
 
@@ -45,6 +47,7 @@ describe("assumeRoleWithWebIdentity", () => {
     });
 
     expect(requests).toEqual(["https://sts.ap-northeast-1.amazonaws.com/"]);
+    expect(requestInit?.redirect).toBe("error");
     expect(creds.accessKeyId).toBe("ASIAEXAMPLE");
     expect(creds.expiration.toISOString()).toBe("2030-01-01T00:00:00.000Z");
   });

@@ -42,9 +42,13 @@ export function gcpMetadataIdentity(
   }
 
   const serviceAccount = options.serviceAccount ?? "default";
-  if (!SERVICE_ACCOUNT_SEGMENT.test(serviceAccount)) {
+  if (
+    !SERVICE_ACCOUNT_SEGMENT.test(serviceAccount) ||
+    serviceAccount === "." ||
+    serviceAccount === ".."
+  ) {
     throw new Error(
-      "GCP serviceAccount contains unsupported characters for the metadata path.",
+      "GCP serviceAccount contains an unsupported metadata path segment.",
     );
   }
 
@@ -76,6 +80,7 @@ export function gcpMetadataIdentity(
             {
               method: "GET",
               headers: { "Metadata-Flavor": "Google" },
+              redirect: "error",
             },
             timeoutMs,
             "GCP metadata identity request",

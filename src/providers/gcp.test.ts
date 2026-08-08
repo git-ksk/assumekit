@@ -21,6 +21,7 @@ describe("gcpMetadataIdentity", () => {
     expect(String(url)).toContain("audience=assumekit");
     expect(String(url)).toContain("format=standard");
     expect(init?.headers).toEqual({ "Metadata-Flavor": "Google" });
+    expect(init?.redirect).toBe("error");
   });
 
   it("keeps @ unescaped in a service-account metadata path", async () => {
@@ -43,13 +44,15 @@ describe("gcpMetadataIdentity", () => {
     expect(String(url)).not.toContain("%40");
   });
 
-  it("rejects service-account path traversal", () => {
-    expect(() =>
-      gcpMetadataIdentity({
-        audience: "example-audience",
-        serviceAccount: "../default",
-      }),
-    ).toThrow(/unsupported characters/);
+  it("rejects service-account path traversal and dot segments", () => {
+    for (const serviceAccount of ["../default", ".", ".."]) {
+      expect(() =>
+        gcpMetadataIdentity({
+          audience: "example-audience",
+          serviceAccount,
+        }),
+      ).toThrow(/unsupported metadata path segment/);
+    }
   });
 
   it("retries transient metadata failures", async () => {
