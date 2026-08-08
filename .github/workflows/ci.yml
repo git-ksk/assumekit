@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -20,12 +20,16 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm install --ignore-scripts
-      - name: Emit dependency lockfile
-        if: matrix.node == 24
+      - name: Commit dependency lockfile
+        if: matrix.node == 24 && github.event_name == 'push'
         run: |
-          printf 'PACKAGE_LOCK_GZIP_BASE64='
-          gzip -c package-lock.json | base64 -w0
-          printf '\n'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: add package lockfile'
+            git push
+          fi
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
