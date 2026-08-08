@@ -10,7 +10,7 @@ AssumeKit は、AWS 外部の workload から OIDC federation で短期 AWS Cred
 
 AssumeKit は独立した OSS であり、Amazon Web Services の公式プロジェクトではありません。
 
-[English README](README.md) · [ドキュメント一覧](docs/README.md)
+[English README](README.md) · [日本語ドキュメント一覧](docs/README.ja.md)
 
 ## 何を簡単にするか
 
@@ -110,6 +110,9 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 | Google → AWS IAM trust | [Trust policy](docs/gcp-aws-trust.md) | [Trust policy](docs/gcp-aws-trust.ja.md) |
 | エラー切り分け | [Troubleshooting](docs/troubleshooting.md) | [トラブルシューティング](docs/troubleshooting.ja.md) |
 | 脅威・境界・非対応 | [Security model](docs/security-model.md) | [セキュリティモデル](docs/security-model.ja.md) |
+| 脆弱性報告 | [Security policy](SECURITY.md) | [セキュリティポリシー](SECURITY.ja.md) |
+| 開発参加 | [Contributing](CONTRIBUTING.md) | [Contributing](CONTRIBUTING.ja.md) |
+| 行動規範 | [Code of Conduct](CODE_OF_CONDUCT.md) | [行動規範](CODE_OF_CONDUCT.ja.md) |
 
 ## 安全側のデフォルト
 
@@ -199,12 +202,12 @@ AssumeKit は認証インフラです。production利用前に [セキュリテ�
 
 live token、temporary credential、private key、customer data、PIIをexampleやpublic issueへ貼らないでください。
 
-脆弱性報告は [SECURITY.md](SECURITY.md) を参照してください。
+脆弱性報告は [SECURITY.ja.md](SECURITY.ja.md) を参照してください。
 
 ## Contributing
 
-Issue / focused PR を歓迎します。[CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
+Issue / focused PR を歓迎します。[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
 
 ## License
 
-MIT
+MIT。正式なライセンス文は [LICENSE](LICENSE) を参照してください。
