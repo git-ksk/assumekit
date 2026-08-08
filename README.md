@@ -1,24 +1,28 @@
-# AWS AssumeKit
+# AssumeKit for AWS
 
-**Lightweight, keyless AWS access from external workload identities.**
+**Keyless AWS access from external workload identities.**
 
-AWS AssumeKit lets workloads outside AWS obtain short-lived AWS credentials through OIDC federation and make SigV4-signed HTTP requests without static AWS access keys, sidecars, proxy processes, the AWS CLI, or a full AWS SDK credential stack.
+AssumeKit is a lightweight TypeScript/Node.js library for workloads outside AWS that need to call SigV4-protected AWS HTTP endpoints without storing long-lived AWS access keys.
 
-> Status: **early alpha**. The first target is Google Cloud Run → AWS. The public API may change before v1.0.
+The first supported path is **Google Cloud Run → Google service-account ID token → AWS STS `AssumeRoleWithWebIdentity` → temporary credentials → SigV4 `fetch()`**.
 
-AWS AssumeKit is an independent open-source project and is not affiliated with or endorsed by Amazon Web Services. AWS and Amazon Web Services are trademarks of Amazon.com, Inc. or its affiliates.
+> Status: **early alpha**. The public API may change before v1.0.
+
+AssumeKit is an independent open-source project and is not affiliated with or endorsed by Amazon Web Services. AWS and Amazon Web Services are trademarks of Amazon.com, Inc. or its affiliates.
+
+[日本語 README](README.ja.md)
 
 ## Why
 
-Calling a SigV4-protected AWS endpoint from Cloud Run often turns a simple HTTP call into several pieces of infrastructure:
+The underlying federation flow is standard, but application code still has to glue together several steps:
 
-1. obtain a Google workload identity token;
+1. request a Google service-account ID token from the metadata server;
 2. exchange it with AWS STS using `AssumeRoleWithWebIdentity`;
 3. cache and refresh temporary AWS credentials;
-4. SigV4-sign each request;
-5. avoid long-lived AWS keys in Cloud Run.
+4. SigV4-sign each AWS HTTP request;
+5. avoid leaking tokens and long-lived credentials along the way.
 
-AWS AssumeKit packages that flow into a normal `fetch()`-style API.
+AssumeKit packages that flow into a `fetch()`-style API without requiring a sidecar, proxy process, AWS CLI, Google auth SDK, or the full AWS SDK credential stack.
 
 ```text
 Cloud Run service identity
@@ -27,7 +31,8 @@ Cloud Run service identity
 Google metadata ID token
         │
         ▼
-AWS STS AssumeRoleWithWebIdentity
+Regional AWS STS
+AssumeRoleWithWebIdentity
         │
         ▼
 Temporary AWS credentials
@@ -42,53 +47,80 @@ SigV4 fetch
         └── other SigV4 HTTP endpoints
 ```
 
-## Install
+## Installation
 
-The npm package is **not published yet**. The first npm release will follow end-to-end validation against a real Cloud Run → AWS setup.
+The package is **not published to npm yet**. The first npm release will follow a real Cloud Run → AWS end-to-end test.
 
-For development, clone this repository and run:
+After release:
 
 ```bash
-npm install
-npm run typecheck
-npm test
-npm run build
+npm install assumekit
 ```
 
 ## Cloud Run example
 
 ```ts
-import { createAwsFetch, gcpMetadataIdentity } from "aws-assumekit";
+import { createAwsFetch, gcpMetadataIdentity } from "assumekit";
 
 const awsFetch = createAwsFetch({
   roleArn: process.env.AWS_ROLE_ARN!,
-  region: "us-east-1",
+  region: "ap-northeast-1",
   service: "execute-api",
   identity: gcpMetadataIdentity({
-    audience: "aws-assumekit",
+    audience: "assumekit",
   }),
 });
 
 const response = await awsFetch(
-  "https://example.execute-api.us-east-1.amazonaws.com/health",
+  "https://example.execute-api.ap-northeast-1.amazonaws.com/health",
 );
 ```
 
-No `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` is required.
+No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or service-account key file is required.
 
-## Design goals
+## Security defaults
 
-- **Keyless by default** — use workload identity and temporary AWS credentials.
-- **No sidecar or proxy process** — import the library into an existing Node.js service.
-- **Small dependency surface** — use platform `fetch()` and a focused SigV4 implementation.
-- **Provider-neutral core** — GCP first; GitHub Actions, Azure, Kubernetes OIDC and other providers can follow.
-- **MCP-friendly, not MCP-only** — AWS MCP is a first-class use case, but the core works with ordinary SigV4 HTTP endpoints.
-- **Safe caching** — temporary credentials are held in memory and refreshed before expiration.
-- **No implicit retries** — signed HTTP retries default to `0`, avoiding accidental replay of non-idempotent MCP/API calls; opt in with `retries` when appropriate.
+- **Regional STS** — AssumeKit derives the Regional AWS STS endpoint from `region` instead of using the legacy global endpoint.
+- **No arbitrary STS endpoint in the public API** — the workload identity token is not configurable to be posted to an arbitrary host.
+- **Short timeouts** — GCP metadata requests default to 3 seconds per attempt; STS requests default to 10 seconds per attempt.
+- **Credential-only retries** — metadata and STS transient failures retry a limited number of times with exponential full jitter.
+- **No implicit service-call retries** — signed AWS requests default to `retries: 0`, avoiding accidental replay of non-idempotent MCP/API calls.
+- **In-memory credentials only** — temporary AWS credentials are never persisted by the library.
+- **Single-flight refresh** — concurrent requests share an in-flight credential refresh.
+
+Credential retries and AWS service-call retries are deliberately separate. You can opt into service-call retries with `retries`, but only do so when replaying the target request is safe.
+
+## Configuration
+
+### `createAwsFetch()`
+
+| Option | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `roleArn` | yes | — | AWS IAM role to assume |
+| `region` | yes | — | Target AWS region and default STS region |
+| `service` | yes | — | SigV4 service name, such as `execute-api` |
+| `identity` | yes | — | Workload identity provider |
+| `sessionName` | no | generated | STS role session name |
+| `durationSeconds` | no | AWS default | 900–43200, subject to role maximum |
+| `refreshBeforeMs` | no | 300000 | Refresh temporary credentials before expiry |
+| `stsTimeoutMs` | no | 10000 | STS timeout per attempt |
+| `stsMaxRetries` | no | 2 | STS transient retries |
+| `stsRetryBaseMs` | no | 100 | Initial full-jitter retry window |
+| `retries` | no | 0 | Signed AWS service-call retries |
+
+### `gcpMetadataIdentity()`
+
+| Option | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `audience` | yes | — | Google ID-token audience; must match the AWS trust policy |
+| `serviceAccount` | no | `default` | Metadata service-account path segment |
+| `timeoutMs` | no | 3000 | Metadata timeout per attempt |
+| `maxRetries` | no | 2 | Transient metadata retries |
+| `retryBaseMs` | no | 50 | Initial full-jitter retry window |
 
 ## AWS trust policy
 
-The AWS role must trust the external OIDC identity and restrict which workloads may assume it. For GCP, validate claims such as audience and subject rather than trusting every token from the provider.
+The AWS role must restrict which Google workload can assume it. For Google service-account ID tokens, use the stable service-account unique ID plus the expected token audience rather than trusting all tokens from `accounts.google.com`.
 
 See [docs/gcp-aws-trust.md](docs/gcp-aws-trust.md).
 
@@ -96,24 +128,29 @@ See [docs/gcp-aws-trust.md](docs/gcp-aws-trust.md).
 
 Included:
 
-- Google Cloud metadata-server ID tokens;
-- AWS `AssumeRoleWithWebIdentity`;
-- in-memory temporary credential caching and refresh;
+- Google Cloud metadata-server service-account ID tokens;
+- AWS `AssumeRoleWithWebIdentity` through Regional STS;
+- in-memory temporary credential caching and early refresh;
+- concurrent refresh de-duplication;
+- bounded timeout/retry behavior for credential acquisition;
 - SigV4 `fetch()` wrapper;
-- Node.js 20+ / TypeScript.
+- Node.js 22+ / TypeScript.
 
 Not included yet:
 
 - persistent credential storage;
-- AWS access-key authentication;
-- local AWS profiles or AWS SSO;
+- static AWS access-key authentication;
+- local AWS profiles or AWS IAM Identity Center;
 - proxy/daemon mode;
 - automatic IAM provisioning;
-- browser support.
+- browser support;
+- automatic retry of non-idempotent AWS requests.
+
+The provider interface is intentionally small so other OIDC workload sources such as GitHub Actions, Azure, and Kubernetes can be added later without changing the AWS-facing API.
 
 ## Security
 
-AWS AssumeKit is authentication infrastructure. Treat IAM trust policies as part of the security boundary. Do not commit credentials, tokens, production account IDs, or real role ARNs to examples or bug reports.
+AssumeKit is authentication infrastructure. Treat IAM trust policies as part of the security boundary. Never commit tokens, production account IDs, private role ARNs, service-account emails, or customer data to examples or public issues.
 
 See [SECURITY.md](SECURITY.md).
 

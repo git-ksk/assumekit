@@ -1,7 +1,7 @@
 {
-  "name": "aws-assumekit",
+  "name": "assumekit",
   "version": "0.1.0-alpha.0",
-  "description": "Lightweight, keyless AWS access from external workload identities.",
+  "description": "Keyless AWS access from external workload identities.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,13 +14,15 @@
   "files": [
     "dist",
     "README.md",
+    "README.ja.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepack": "npm run build"
   },
   "keywords": [
     "aws",
@@ -35,7 +37,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "aws4fetch": "^1.0.20"
@@ -47,10 +49,10 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/git-ksk/aws-assumekit.git"
+    "url": "git+https://github.com/git-ksk/assumekit.git"
   },
   "bugs": {
-    "url": "https://github.com/git-ksk/aws-assumekit/issues"
+    "url": "https://github.com/git-ksk/assumekit/issues"
   },
-  "homepage": "https://github.com/git-ksk/aws-assumekit#readme"
+  "homepage": "https://github.com/git-ksk/assumekit#readme"
 }

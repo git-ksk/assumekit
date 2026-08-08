@@ -18,8 +18,13 @@ export interface CreateAwsFetchOptions {
   sessionName?: string;
   durationSeconds?: number;
   refreshBeforeMs?: number;
-  stsEndpoint?: string;
-  /** Number of HTTP retries performed by the SigV4 client. Defaults to 0. */
+  /** AWS STS request timeout per attempt. Defaults to 10000ms. */
+  stsTimeoutMs?: number;
+  /** AWS STS retries for transient credential-exchange failures. Defaults to 2. */
+  stsMaxRetries?: number;
+  /** Base delay for full-jitter AWS STS retry backoff. Defaults to 100ms. */
+  stsRetryBaseMs?: number;
+  /** Number of retries performed for signed AWS service requests. Defaults to 0. */
   retries?: number;
 }
 

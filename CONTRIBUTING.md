@@ -1,25 +1,17 @@
 # Contributing
 
-Thanks for considering a contribution.
+Thanks for helping improve AssumeKit.
 
-## Development principles
+## Before opening a pull request
 
-- keep the runtime dependency surface small;
-- do not introduce long-lived credential storage;
-- preserve a fetch-first API;
-- keep identity providers modular;
-- add tests for credential refresh and signing behavior;
-- never include real credentials, tokens, account IDs, or private infrastructure details in fixtures.
+- Keep changes focused and small where practical.
+- Add or update tests for behavior changes.
+- Do not include real credentials, tokens, account IDs, role ARNs, service-account emails, local machine paths, or customer data.
+- Run `npm run typecheck`, `npm test`, and `npm run build`.
+- Treat changes to trust-policy examples, token handling, retries, endpoint selection, and credential caching as security-sensitive.
 
-## Local development
+## Scope
 
-```bash
-npm install
-npm run typecheck
-npm test
-npm run build
-```
+The initial scope is lightweight external workload identity → AWS STS → SigV4 HTTP access, with GCP metadata identity as the first provider.
 
-## Pull requests
-
-Prefer small, focused changes. Explain security-sensitive behavior explicitly in the PR description.
+Please open an issue before large architectural changes such as daemon/proxy mode, persistent credential storage, or broad SDK abstractions.
