@@ -20,6 +20,12 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm install --ignore-scripts
+      - name: Emit dependency lockfile
+        if: matrix.node == 24
+        run: |
+          printf 'PACKAGE_LOCK_GZIP_BASE64='
+          gzip -c package-lock.json | base64 -w0
+          printf '\n'
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
