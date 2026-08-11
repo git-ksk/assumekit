@@ -14,6 +14,7 @@ The underlying federation mechanism is standard. AssumeKit is a thin, security-o
 | Roadmap / provider compatibility contract | [Roadmap](roadmap.md) | [Roadmap](roadmap.ja.md) |
 | End-to-end setup | [Getting started](getting-started.md) | [セットアップガイド](getting-started.ja.md) |
 | Release-blocking real-cloud E2E | [Cloud Run E2E runbook](cloud-run-e2e.md) | [Cloud Run E2E runbook](cloud-run-e2e.ja.md) |
+| npm release / Trusted Publishing | [Release runbook](releasing.md) | [Release手順](releasing.ja.md) |
 | AWS/GCP trust details | [GCP → AWS trust policy](gcp-aws-trust.md) | [GCP → AWS trust policy](gcp-aws-trust.ja.md) |
 | Troubleshooting | [Troubleshooting](troubleshooting.md) | [トラブルシューティング](troubleshooting.ja.md) |
 | Security boundaries | [Security model](security-model.md) | [セキュリティモデル](security-model.ja.md) |
@@ -29,7 +30,8 @@ The underlying federation mechanism is standard. AssumeKit is a thin, security-o
 4. Review [GCP → AWS trust policy](gcp-aws-trust.md) before using a production AWS account.
 5. Review [Security model](security-model.md) before enabling AssumeKit in a sensitive workload.
 6. Before the first npm release, execute the [real Cloud Run → AWS E2E runbook](cloud-run-e2e.md) from the exact release commit.
-7. Use [Troubleshooting](troubleshooting.md) when the metadata, STS, allowlist, SigV4, or E2E startup stages fail.
+7. Follow the [release runbook](releasing.md) for the one-time npm bootstrap and subsequent OIDC Trusted Publishing releases.
+8. Use [Troubleshooting](troubleshooting.md) when the metadata, STS, allowlist, SigV4, or E2E startup stages fail.
 
 ## Current status
 
