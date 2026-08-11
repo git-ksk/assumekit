@@ -23,6 +23,7 @@ Release requirements:
 - publish the first npm alpha only after that gate passes;
 - keep Google metadata identity as the only production identity provider in v0.1;
 - keep Regional STS, exact signed-host allowlisting, redirect rejection, bounded credential acquisition, and zero default service-call retries as compatibility/security properties;
+- keep the public API intentionally small until real Cloud Run dogfood proves the path;
 - keep static keys, IAM auto-provisioning, persistent credential storage, browser auth, and proxy/daemon mode out of v0.1.
 
 ## Supported SigV4 endpoint classes
@@ -63,18 +64,21 @@ A production provider must satisfy this contract:
 
 The AWS-facing `createAwsFetch()` contract should remain stable as identity sources are generalized.
 
-## Post-v0.1 provider direction
+## Post-v0.1: expand only when there is a demonstrated gap
 
-Generalize the **identity source**, not the AWS-facing API. Add providers only when there is a real use case and a credible E2E environment.
+Do **not** use provider count as a roadmap metric. A new identity provider should be added only when there is a concrete fetch-native use case where existing official or provider-native integrations leave meaningful glue, lifecycle, or security-boundary work that AssumeKit can reduce.
 
-Tentative order:
+Before prioritizing a provider, require:
 
-1. GitHub Actions OIDC;
-2. Azure workload identity / managed identity where it can satisfy the provider contract cleanly;
-3. Kubernetes projected service-account tokens / workload identity;
-4. other providers only with equivalent security properties and real E2E evidence.
+1. a documented user/workload need;
+2. a comparison with the mature first-party or official integration for that platform;
+3. a clear explanation of the gap AssumeKit closes without becoming a generic credential chain;
+4. an implementation that satisfies the provider contract above; and
+5. a credible real-cloud E2E environment before production-support claims.
 
-This ordering is directional, not a promise of release dates.
+Azure workload identity, Kubernetes projected service-account tokens, or other workload identities may be candidates when they satisfy those criteria. **GitHub Actions OIDC is not the automatic next target**: GitHub → AWS already has mature official integrations, so AssumeKit should add a GitHub provider only if a specific fetch-native gap is demonstrated that those integrations do not address.
+
+Prefer demand-driven provider expansion over a fixed provider checklist. Generalize the **identity source**, not the AWS-facing API.
 
 ## Explicit non-goals
 
@@ -82,6 +86,7 @@ AssumeKit should not grow into:
 
 - a static AWS access-key fallback;
 - a Google service-account JSON-key loader;
+- a generic multi-source credential chain;
 - an IAM role/policy provisioner;
 - a generic secret manager;
 - persistent credential storage;
