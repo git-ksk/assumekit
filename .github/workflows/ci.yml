@@ -29,3 +29,4 @@ jobs:
       - run: node --check scripts/cloud-run-e2e.mjs
       - run: test -f dist/index.js
       - run: npm pack --dry-run
+      - run: npm run smoke:consumer
