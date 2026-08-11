@@ -59,9 +59,11 @@ jobs:
           fi
 
       - name: Verify tag, version, and npm bootstrap state
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          tag="${{ github.event.release.tag_name }}"
+          tag="$RELEASE_TAG"
           version="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")"
           package_name="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).name")"
 
