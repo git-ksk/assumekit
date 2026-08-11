@@ -55,7 +55,7 @@ AssumeKit は IAM を自動provisionしません。設定を意図的に明示�
 3. workload/Role専用のtoken **audience**を決める。
 4. Google service-account identityとaudienceを固定したAWS IAM Role **trust policy**を作る。
 5. 対象AWS APIに必要な権限だけを別の**permissions policy**としてRoleへ付ける。
-6. Cloud Runにservice accountをattachし、アプリへ `roleArn` / `region` / `service` / `audience` を設定する。
+6. Cloud Runにservice accountをattachし、アプリへ `roleArn` / `region` / `service` / `audience` / 許可するAWS request hostを設定する。
 
 コピペ可能な `gcloud` / AWS CLI 例は **[Cloud Run → AWS セットアップガイド](docs/getting-started.ja.md)** にまとめています。
 
@@ -76,6 +76,7 @@ npm install assumekit
 ```ts
 import { createAwsFetch, gcpMetadataIdentity } from "assumekit";
 
+const endpoint = new URL(process.env.AWS_ENDPOINT!);
 const awsFetch = createAwsFetch({
   roleArn: process.env.AWS_ROLE_ARN!,
   region: process.env.AWS_REGION!,
@@ -83,9 +84,10 @@ const awsFetch = createAwsFetch({
   identity: gcpMetadataIdentity({
     audience: process.env.AWS_OIDC_AUDIENCE!,
   }),
+  allowedHosts: [endpoint.host],
 });
 
-const response = await awsFetch(process.env.AWS_ENDPOINT!);
+const response = await awsFetch(endpoint);
 ```
 
 秘密情報ではない設定例:
@@ -101,6 +103,8 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / Google service-account private-key file / 手動保存したGoogle ID tokenは不要です。
 
 `service` は AWS の **SigV4 signing name** で、製品名と一致するとは限りません。API Gateway IAM auth は `execute-api` です。他サービスはAWS公式ドキュメントでsigning nameを確認してください。
+
+`allowedHosts` はSigV4署名を許可する送信先hostの完全一致allowlistです。schemeやpathは受け付けません。上の例のように、信頼済みの `AWS_ENDPOINT` から `host` を取得して渡すのが安全です。
 
 ## ドキュメント
 
@@ -119,6 +123,7 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 - AWS STS は `region` から Regional endpoint を自動選択
 - public API から任意STS endpointの指定を排除
 - GCP metadata / STS request はredirectを追従しない
+- SigV4署名するAWS service requestはHTTPSかつ `allowedHosts` 完全一致を必須化
 - GCP metadata は1試行3秒、STSは1試行10秒でtimeout
 - metadata / STSの一時障害だけを限定retry
 - SigV4署名後のAWS API/MCP呼び出しはretry `0` がdefault
@@ -138,6 +143,7 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 | `region` | yes | — | target AWS region / STS region |
 | `service` | yes | — | `execute-api`等のSigV4 signing service name |
 | `identity` | yes | — | Workload Identity Provider |
+| `allowedHosts` | yes | — | signed AWS service requestを許可するHTTPS host |
 | `sessionName` | no | generated | STS Role session name。PIIは避ける |
 | `durationSeconds` | no | AWS default | 900–43200。Role側上限にも従う |
 | `refreshBeforeMs` | no | 300000 | expiration前のrefresh時間 |
@@ -176,6 +182,7 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 - temporary Credentialのcache・期限前refresh
 - 同時refreshの重複排除
 - Credential取得時のtimeout / bounded retry
+- signed request送信先のHTTPS host allowlist
 - SigV4 `fetch()`
 - Node.js 22+ / TypeScript
 
@@ -195,6 +202,8 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 ## ローカル開発
 
 `gcpMetadataIdentity()` はGoogle metadata serverを利用するため、通常のローカルPCでは動きません。unit testではtest用 `WorkloadIdentityProvider` を注入してください。Cloud Runを再現するためだけにproduction codeへ長期key fallbackを追加する方針ではありません。
+
+release-blockingの実Cloud E2E用に `npm run e2e:cloud-run` を用意しています。このcommandはCloud Run revision外では意図的に失敗し、設定済み `AWS_ENDPOINT` のhostだけを署名先として許可します。
 
 ## Security
 
