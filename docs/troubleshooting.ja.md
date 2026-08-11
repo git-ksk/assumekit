@@ -15,6 +15,8 @@ AssumeKit の認証・通信は3段階に分かれています。IAM policy を�
 | `allowedHosts must contain at least one HTTPS request host` | ローカル設定 | scheme/pathを含まない信頼済みhostを1件以上指定したか |
 | `AWS request host is not allowed` | request validation | request URLのhostが `allowedHosts` と完全一致しているか。任意入力を通すためにallowlistを広げない |
 | `AWS request target must use HTTPS` | request validation | HTTPS endpointだけを使用する |
+| redirect関連のfetch error | AWS service | final canonical HTTPS endpointを使用する。signed service redirectは意図的に拒否される |
+| service request abort/timeout | AWS service | callerが渡した `AbortSignal` deadlineとtarget/network healthを確認する |
 | `Failed to obtain GCP identity token` | GCP metadata | 本当にCloud Run/Google Cloud上で、意図したservice accountが付いているか |
 | metadata timeout | GCP metadata | runtime環境、metadata access、`serviceAccount` override |
 | STS `InvalidIdentityToken` | AWS STS | audience と trust policy の claim mapping |
@@ -130,6 +132,24 @@ STS成功後に対象サービスだけ拒否される場合、主に**Role perm
 
 を分けて確認します。
 
+### redirect関連のfetch error
+
+AssumeKitはsigned AWS service requestに `redirect: "error"` を強制します。callerが `redirect: "follow"` を渡してもredirectは追従しません。
+
+最終canonical AWS HTTPS endpointを直接指定してください。最初にallowlist検証したdestinationの外へsigned requestがredirectで移動する経路を残さないための仕様です。
+
+### service request deadline / timeout
+
+metadata / STS credential取得にはbuilt-in timeoutがありますが、application service requestすべてに一律timeoutは適用しません。deadlineが必要なら `signal` を渡します。
+
+```ts
+await awsFetch(endpoint, {
+  signal: AbortSignal.timeout(15_000),
+});
+```
+
+対象operationとworkloadに合うtimeoutを選んでください。遅い・到達不能なendpointを隠すために上限を全部外すのは避けてください。
+
 ### `SignatureDoesNotMatch`
 
 確認項目:
@@ -164,7 +184,7 @@ Cloud Run imageはrepository rootからbuildしてください。projectは `gcp
 
 identity chainまたはAWS smoke requestが失敗した場合は想定動作です。E2E processは署名付きAWS request成功後にだけ `0.0.0.0:$PORT` でlistenするため、Cloud Run deployment health check自体がrelease gateの一部になります。
 
-まずService logsを確認し、local validation / metadata / STS / AWS serviceのどこで失敗したかを切り分けてください。起動だけ通すためにhealth挙動を無効化したりIAMを緩めたりしないでください。
+まずService logsを確認し、local validation / metadata / STS / redirect・timeout / AWS serviceのどこで失敗したかを切り分けてください。起動だけ通すためにhealth挙動を無効化したりIAMを緩めたりしないでください。
 
 ## Credential refresh
 
