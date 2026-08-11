@@ -173,13 +173,15 @@ AWS_ROLE_ARN=arn:aws:iam::<AWS_ACCOUNT_ID>:role/AssumeKitExample
 AWS_REGION=ap-northeast-1
 AWS_SERVICE=execute-api
 AWS_OIDC_AUDIENCE=assumekit-prod-example
+AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 ```
 
-`AWS_ROLE_ARN` と audience は credential ではありません。このフローのために `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / Google private key / ID token / STS session token を保存しないでください。
+`AWS_ROLE_ARN`、audience、endpoint は設定上の識別子であり credential ではありません。このフローのために `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / Google private key / ID token / STS session token を保存しないでください。
 
 ```ts
 import { createAwsFetch, gcpMetadataIdentity } from "assumekit";
 
+const endpoint = new URL(process.env.AWS_ENDPOINT!);
 const awsFetch = createAwsFetch({
   roleArn: process.env.AWS_ROLE_ARN!,
   region: process.env.AWS_REGION!,
@@ -187,9 +189,10 @@ const awsFetch = createAwsFetch({
   identity: gcpMetadataIdentity({
     audience: process.env.AWS_OIDC_AUDIENCE!,
   }),
+  allowedHosts: [endpoint.host],
 });
 
-const response = await awsFetch(process.env.AWS_ENDPOINT!);
+const response = await awsFetch(endpoint);
 
 if (!response.ok) {
   throw new Error(`AWS request failed: ${response.status}`);
@@ -198,6 +201,8 @@ if (!response.ok) {
 
 `service` は AWS の SigV4 signing name です。製品名と一致するとは限りません。API Gateway IAM auth は `execute-api` です。他サービスは AWS 公式ドキュメントで signing name を確認してください。
 
+`allowedHosts` はSigV4署名を許可する送信先hostの完全一致allowlistです。schemeやpathは指定しません。endpoint自体は信頼済み設定として扱ってください。allowlistは任意hostへの署名送信を防ぎますが、path・HTTP method・payloadに対するapplication-level authorizationの代わりにはなりません。
+
 ## 7. Cloud Run に設定を反映する
 
 ```bash
@@ -205,7 +210,7 @@ gcloud run services update "$CLOUD_RUN_SERVICE" \
   --project "$GCP_PROJECT_ID" \
   --region "$GCP_REGION" \
   --service-account "$GCP_SERVICE_ACCOUNT_EMAIL" \
-  --update-env-vars "AWS_ROLE_ARN=arn:aws:iam::<AWS_ACCOUNT_ID>:role/${AWS_ROLE_NAME},AWS_REGION=${AWS_REGION},AWS_SERVICE=execute-api,AWS_OIDC_AUDIENCE=${ASSUMEKIT_AUDIENCE}"
+  --update-env-vars "AWS_ROLE_ARN=arn:aws:iam::<AWS_ACCOUNT_ID>:role/${AWS_ROLE_NAME},AWS_REGION=${AWS_REGION},AWS_SERVICE=execute-api,AWS_OIDC_AUDIENCE=${ASSUMEKIT_AUDIENCE},AWS_ENDPOINT=https://example.execute-api.${AWS_REGION}.amazonaws.com/health"
 ```
 
 実 token や temporary credential を environment variable にコピーしないでください。
@@ -221,6 +226,20 @@ AWS 呼び出しを1回だけ行う application path を実行し、段階ごと
 5. application log に Google ID token / temporary AWS credential が出ていない。
 
 CIやunit testが成功していても、この real-cloud E2E の代わりにはなりません。
+
+### release-blocking smoke entrypoint
+
+repoには `npm run e2e:cloud-run` を用意しています。上記environment variablesとservice accountを設定した一時的なCloud Run **Service** revisionのentrypointとして実行します。
+
+このsmoke entrypointは意図的に次の挙動にしています。
+
+- `K_SERVICE` が無い環境では失敗し、ローカルPCでrelease gateを誤って満たせない。
+- 実Google metadata identity → 実Regional AWS STSの交換を行う。
+- `AWS_ENDPOINT` のhostに完全一致するHTTPS requestだけを1回SigV4署名して送る。
+- AWS service call retryは `0`。
+- AWS request成功後にだけCloud Runから渡される `PORT` で `0.0.0.0` listenを開始する。
+
+Cloud Run Serviceのingress containerは `0.0.0.0:$PORT` でlistenする必要があるため、AWS smokeに失敗したrevisionは正常なserving instanceになりません。release gateを記録した後、この一時E2E serviceは削除してください。production APIとして常設する用途ではありません。
 
 ## ローカル開発
 
@@ -241,3 +260,4 @@ unit test では `WorkloadIdentityProvider` をテスト用に差し替えられ
 - AWS IAM — STS Regions/endpoints: https://docs.aws.amazon.com/ja_jp/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
 - Google Cloud Run — service identity: https://cloud.google.com/run/docs/securing/service-identity?hl=ja
 - Google Cloud Run — service identity configuration: https://cloud.google.com/run/docs/configuring/services/service-identity?hl=ja
+- Google Cloud Run — container runtime contract: https://cloud.google.com/run/docs/container-contract?hl=ja

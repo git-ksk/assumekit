@@ -11,7 +11,7 @@ The most sensitive values handled by the runtime are:
 1. the short-lived Google service-account ID token;
 2. the AWS temporary access key ID, secret access key, and session token returned by STS.
 
-The configured AWS role ARN and token audience are identifiers, not secrets.
+The configured AWS role ARN, token audience, and target endpoint are identifiers/configuration, not credentials.
 
 ## Trust boundaries
 
@@ -25,7 +25,7 @@ Cloud Run process
   │           validates token + IAM role trust policy
   │           returns temporary AWS credentials
   │
-  └─ HTTPS → target AWS service
+  └─ HTTPS → allowlisted target AWS service host
               SigV4 request using temporary credentials
 ```
 
@@ -57,6 +57,16 @@ The intended flow starts from the Cloud Run service identity and exchanges a Goo
 
 These choices reduce the chance that an identity token is accidentally posted to an attacker-controlled redirect/endpoint through normal configuration.
 
+### Explicit signed-request destination allowlist
+
+`createAwsFetch()` requires at least one `allowedHosts` entry. Before any workload identity token or AWS temporary credential is obtained, each target request is rejected unless it:
+
+- is an absolute HTTPS URL;
+- has no URL credentials; and
+- exactly matches an allowlisted host, including a non-default port when one is used.
+
+This prevents untrusted request input from selecting an arbitrary destination for a SigV4-signed request under normal library use. The allowlist is host-level only; application authorization must still control paths, methods, query parameters, and payloads.
+
 ### Temporary credentials stay in memory
 
 AssumeKit does not persist temporary AWS credentials to disk, a database, environment variables, or an application config file.
@@ -67,11 +77,11 @@ Transient metadata/STS failures use bounded retry with full jitter. Service-call
 
 ### Single-flight credential refresh
 
-Concurrent requests share one in-progress refresh, reducing unnecessary identity-token issuance and STS role sessions.
+Concurrent requests share one in-progress refresh, reducing unnecessary identity-token issuance and STS role sessions. A rejected refresh promise is cleared so a later request can recover instead of retaining the failed refresh indefinitely.
 
 ### Defensive input validation
 
-The library validates role/session/region/service-related configuration and rejects unsafe GCP metadata path segments.
+The library validates role/session/region/service-related configuration, signed-request hosts, and GCP metadata path segments.
 
 ## Responsibilities outside the library
 
@@ -95,9 +105,9 @@ If an attacker gains arbitrary code execution inside the Cloud Run container/pro
 
 Container/runtime hardening and least-privilege IAM remain required.
 
-### SSRF and untrusted URL selection
+### Untrusted request paths and payloads
 
-AssumeKit signs and sends the target URL provided by application code. Do not let untrusted users choose arbitrary AWS request destinations or request parameters without an application-level authorization model.
+The signed-host allowlist prevents callers from switching to an arbitrary destination host, but it does not decide whether a particular path, method, query string, or payload is authorized. Do not expose a generic signed-request proxy to untrusted users without an application-level authorization model.
 
 ### Request replay when enabling service retries
 
@@ -115,8 +125,10 @@ The repository currently:
 
 - uses a committed npm lockfile;
 - uses `npm ci --ignore-scripts` in CI;
+- fails CI on high-severity production dependency audit findings;
 - runs tests on supported Node.js versions;
 - pins GitHub Actions to commit SHAs;
+- enables Dependabot version updates for npm and GitHub Actions;
 - keeps the runtime dependency surface intentionally small;
 - verifies the npm package shape with `npm pack --dry-run`.
 
@@ -130,6 +142,7 @@ The intended npm release path is Trusted Publishing/OIDC with provenance rather 
 - It does not provide a local static-key fallback.
 - It does not protect a compromised Cloud Run process.
 - It does not automatically provide application-level idempotency.
+- It does not authorize request paths, methods, query strings, or payloads merely because the host is allowlisted.
 - It does not currently support every AWS partition/provider combination; support should be treated as explicit, not inferred.
 
 ## Reporting vulnerabilities

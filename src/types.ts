@@ -15,6 +15,8 @@ export interface CreateAwsFetchOptions {
   region: string;
   service: string;
   identity: WorkloadIdentityProvider;
+  /** Exact HTTPS hosts that signed AWS service requests may target. Include a port when non-default. */
+  allowedHosts: readonly string[];
   sessionName?: string;
   durationSeconds?: number;
   refreshBeforeMs?: number;

@@ -183,15 +183,17 @@ AWS_ROLE_ARN=arn:aws:iam::<AWS_ACCOUNT_ID>:role/AssumeKitExample
 AWS_REGION=ap-northeast-1
 AWS_SERVICE=execute-api
 AWS_OIDC_AUDIENCE=assumekit-prod-example
+AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 ```
 
-`AWS_ROLE_ARN` and the audience are identifiers, not credentials. Never add `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, a Google private key, an ID token, or an STS session token for this flow.
+`AWS_ROLE_ARN`, the audience, and the endpoint are configuration identifiers, not credentials. Never add `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, a Google private key, an ID token, or an STS session token for this flow.
 
 Application code:
 
 ```ts
 import { createAwsFetch, gcpMetadataIdentity } from "assumekit";
 
+const endpoint = new URL(process.env.AWS_ENDPOINT!);
 const awsFetch = createAwsFetch({
   roleArn: process.env.AWS_ROLE_ARN!,
   region: process.env.AWS_REGION!,
@@ -199,9 +201,10 @@ const awsFetch = createAwsFetch({
   identity: gcpMetadataIdentity({
     audience: process.env.AWS_OIDC_AUDIENCE!,
   }),
+  allowedHosts: [endpoint.host],
 });
 
-const response = await awsFetch(process.env.AWS_ENDPOINT!);
+const response = await awsFetch(endpoint);
 
 if (!response.ok) {
   throw new Error(`AWS request failed: ${response.status}`);
@@ -209,6 +212,8 @@ if (!response.ok) {
 ```
 
 The `service` value is the AWS SigV4 signing name, not necessarily the marketing/product name. For API Gateway IAM authorization, it is `execute-api`. Confirm the signing name for other AWS services in that service's AWS documentation.
+
+`allowedHosts` is an exact allowlist for signed request destinations. It accepts a host name and optional port, not a scheme or path. Keep the endpoint itself trusted; the allowlist protects the credential path from being redirected by application input to an arbitrary host, but it does not replace authorization for paths, methods, or payloads.
 
 ## 7. Deploy the Cloud Run configuration
 
@@ -219,7 +224,7 @@ gcloud run services update "$CLOUD_RUN_SERVICE" \
   --project "$GCP_PROJECT_ID" \
   --region "$GCP_REGION" \
   --service-account "$GCP_SERVICE_ACCOUNT_EMAIL" \
-  --update-env-vars "AWS_ROLE_ARN=arn:aws:iam::<AWS_ACCOUNT_ID>:role/${AWS_ROLE_NAME},AWS_REGION=${AWS_REGION},AWS_SERVICE=execute-api,AWS_OIDC_AUDIENCE=${ASSUMEKIT_AUDIENCE}"
+  --update-env-vars "AWS_ROLE_ARN=arn:aws:iam::<AWS_ACCOUNT_ID>:role/${AWS_ROLE_NAME},AWS_REGION=${AWS_REGION},AWS_SERVICE=execute-api,AWS_OIDC_AUDIENCE=${ASSUMEKIT_AUDIENCE},AWS_ENDPOINT=https://example.execute-api.${AWS_REGION}.amazonaws.com/health"
 ```
 
 Do not copy real tokens or temporary credentials into Cloud Run environment variables.
@@ -235,6 +240,20 @@ Trigger an application path that makes one signed AWS request and verify the sta
 5. Application logs do not contain the Google ID token or AWS temporary credentials.
 
 A successful unit/CI run is **not** a substitute for this real-cloud test.
+
+### Release-blocking smoke entrypoint
+
+The repository includes `npm run e2e:cloud-run`. Run it as the entrypoint of a temporary Cloud Run **service** revision with the environment variables above and the intended service account attached.
+
+The smoke entrypoint intentionally:
+
+- refuses to run when `K_SERVICE` is absent, so a laptop cannot accidentally satisfy the release gate;
+- obtains the real Google metadata identity and exchanges it through real Regional AWS STS;
+- performs one HTTPS signed request only to the configured `AWS_ENDPOINT` host;
+- uses zero service-call retries;
+- starts a minimal HTTP server on Cloud Run's injected `PORT` only after the AWS request succeeds.
+
+Because Cloud Run services require the ingress container to listen on `0.0.0.0:$PORT`, a failed AWS smoke request prevents the test revision from becoming a healthy serving instance. Delete the temporary E2E service after the release gate is recorded; it is not intended to become a production API.
 
 ## Local development
 
@@ -255,4 +274,5 @@ For unit tests, inject a test `WorkloadIdentityProvider`. Do not add a productio
 - AWS IAM — STS Regions and endpoints: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
 - Google Cloud Run — service identity: https://cloud.google.com/run/docs/securing/service-identity
 - Google Cloud Run — configure service identity: https://cloud.google.com/run/docs/configuring/services/service-identity
+- Google Cloud Run — container runtime contract: https://cloud.google.com/run/docs/container-contract
 - Google Cloud IAM — service account resource and `uniqueId`: https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts

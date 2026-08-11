@@ -22,8 +22,10 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: node --check scripts/cloud-run-e2e.mjs
       - run: test -f dist/index.js
       - run: npm pack --dry-run
