@@ -106,11 +106,14 @@ No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, Google service-account private-
 
 `allowedHosts` is an exact allowlist for signed request destinations. It accepts host names with an optional port, not schemes or paths. Deriving it from a trusted configured `AWS_ENDPOINT` as shown above avoids allowing untrusted request destinations.
 
+Signed AWS service requests reject redirects even if the caller asks to follow them. Configure the final canonical HTTPS endpoint directly. Application service calls do not receive one global library timeout; pass an `AbortSignal`, such as `AbortSignal.timeout(...)`, when the operation needs a deadline.
+
 ## Documentation
 
 | Topic | English | 日本語 |
 | --- | --- | --- |
 | End-to-end configuration | [Getting started](docs/getting-started.md) | [セットアップガイド](docs/getting-started.ja.md) |
+| Release-blocking real-cloud E2E | [Cloud Run E2E runbook](docs/cloud-run-e2e.md) | [Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) |
 | Google → AWS IAM trust | [Trust policy](docs/gcp-aws-trust.md) | [Trust policy](docs/gcp-aws-trust.ja.md) |
 | Errors and diagnosis | [Troubleshooting](docs/troubleshooting.md) | [トラブルシューティング](docs/troubleshooting.ja.md) |
 | Threats / boundaries / non-goals | [Security model](docs/security-model.md) | [セキュリティモデル](docs/security-model.ja.md) |
@@ -121,14 +124,15 @@ No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, Google service-account private-
 - **No arbitrary STS endpoint in the public API** — normal configuration cannot post the workload ID token to a caller-supplied STS host.
 - **No redirect following for identity exchange** — GCP metadata and STS requests use redirect rejection.
 - **Explicit signed-host allowlist** — every signed AWS service request must use HTTPS and match an exact `allowedHosts` entry.
-- **Short timeouts** — GCP metadata requests default to 3 seconds per attempt; STS requests default to 10 seconds per attempt.
+- **No signed service redirects** — service requests force redirect rejection after the allowlist check.
+- **Short credential timeouts** — GCP metadata requests default to 3 seconds per attempt; STS requests default to 10 seconds per attempt.
 - **Credential-only retries** — metadata and STS transient failures retry a limited number of times with exponential full jitter.
 - **No implicit service-call retries** — signed AWS requests default to `retries: 0`, avoiding accidental replay of non-idempotent MCP/API calls.
 - **In-memory credentials only** — temporary AWS credentials are never persisted by the library.
 - **Single-flight refresh** — concurrent requests share an in-flight credential refresh.
 - **Metadata path validation** — unsafe GCP service-account path segments are rejected.
 
-Credential retries and AWS service-call retries are deliberately separate. You can opt into service-call retries with `retries`, but only do so when replaying the target request is safe.
+Credential retries and AWS service-call retries are deliberately separate. You can opt into service-call retries with `retries`, but only do so when replaying the target request is safe. Use a caller-provided `AbortSignal` when a signed service call needs a deadline.
 
 ## Configuration
 
@@ -180,6 +184,7 @@ Included:
 - concurrent refresh de-duplication;
 - bounded timeout/retry behavior for credential acquisition;
 - explicit HTTPS signed-request host allowlisting;
+- redirect rejection for signed service requests;
 - SigV4 `fetch()` wrapper;
 - Node.js 22+ / TypeScript.
 
@@ -191,6 +196,7 @@ Not included yet:
 - proxy/daemon mode;
 - automatic IAM provisioning;
 - browser support;
+- one global timeout for all signed application service calls;
 - automatic retry of non-idempotent AWS requests;
 - implicit support for every cloud/provider/AWS partition combination.
 
@@ -200,7 +206,7 @@ The provider interface is intentionally small so other OIDC workload sources suc
 
 `gcpMetadataIdentity()` intentionally relies on the Google metadata server and therefore does not work on a normal local laptop. For unit tests, inject a test `WorkloadIdentityProvider`; do not add a production long-lived-key fallback merely to simulate Cloud Run.
 
-The repository includes `npm run e2e:cloud-run` for the release-blocking real-cloud smoke test. It intentionally refuses to run outside a Cloud Run revision and uses the configured `AWS_ENDPOINT` host as the exact signed-request allowlist.
+The repository includes `npm run e2e:cloud-run` for the release-blocking real-cloud smoke test. It intentionally refuses to run outside a Cloud Run revision. Follow the [Cloud Run E2E runbook](docs/cloud-run-e2e.md), which pins the buildpack runtime, uses the configured `AWS_ENDPOINT` host as the exact signed-request allowlist, rejects redirects, and bounds the final smoke request.
 
 ## Security
 
