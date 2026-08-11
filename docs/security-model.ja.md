@@ -11,7 +11,7 @@ runtimeで扱う主な機密値は次です。
 1. short-lived Google service-account ID token
 2. AWS STSが返すtemporary access key ID / secret access key / session token
 
-AWS Role ARNとtoken audienceは識別子であり、credentialそのものではありません。
+AWS Role ARN、token audience、target endpointは識別子・設定値であり、credentialそのものではありません。
 
 ## Trust boundary
 
@@ -25,7 +25,7 @@ Cloud Run process
   │           token + IAM trust policyを検証
   │           temporary AWS credentials
   │
-  └─ HTTPS → target AWS service
+  └─ HTTPS → allowlist済みtarget AWS service host
               temporary credentialsでSigV4署名
 ```
 
@@ -57,6 +57,16 @@ Cloud Run service identityを起点に、Google-signed ID tokenをtemporary AWS 
 
 通常設定だけでID tokenを任意host/redirect先へ送ってしまうリスクを減らしています。
 
+### SigV4署名先hostを明示allowlist
+
+`createAwsFetch()` は1件以上の `allowedHosts` を必須にします。Workload Identity tokenやtemporary AWS credentialを取得する前に、target requestが次を満たすか検証します。
+
+- absolute HTTPS URLである。
+- URL credentialを含まない。
+- non-default portを使う場合はportも含めて、`allowedHosts` のhostと完全一致する。
+
+これにより、通常利用ではuntrusted request inputから任意hostへSigV4署名requestを送る経路を防ぎます。ただしallowlistはhost単位です。path、HTTP method、query、payloadのauthorizationはapplication側で必要です。
+
 ### Temporary credentialはメモリだけ
 
 AssumeKitはtemporary AWS credentialをdisk、DB、environment variable、設定ファイルへ永続化しません。
@@ -67,11 +77,11 @@ metadata/STSの一時障害だけをbounded full-jitter retryします。対象A
 
 ### Single-flight refresh
 
-同時request時は1つのcredential refreshを共有し、不要なID token発行・STS session増加を抑えます。
+同時request時は1つのcredential refreshを共有し、不要なID token発行・STS session増加を抑えます。refreshが失敗した場合はrejected promiseを保持し続けず、次requestで再取得できる状態へ戻します。
 
 ### 入力validation
 
-region/service/session関連設定やGCP metadata path segmentを検証し、危険なpath normalizationを拒否します。
+region/service/session関連設定、signed-request host、GCP metadata path segmentを検証します。
 
 ## ライブラリ外で必要な対策
 
@@ -95,9 +105,9 @@ Cloud Run container/process内で任意コード実行を奪われた場合、As
 
 そのためcontainer/runtime hardeningとleast-privilege IAMは必須です。
 
-### SSRF / untrusted URL
+### untrusted path / method / payload
 
-AssumeKitはapplicationが渡したtarget URLへ署名付きrequestを送ります。untrusted userが任意AWS destinationやrequest parameterを選べる設計にしないでください。application-level authorizationが必要です。
+signed-host allowlistは送信先hostの任意切替を防ぎますが、特定path、HTTP method、query、payloadを許可してよいかまでは判断しません。untrusted user向けにgenericなsigned-request proxyを公開する場合は、application-level authorizationを別途実装してください。
 
 ### service retryを有効にした場合のreplay
 
@@ -115,8 +125,10 @@ Role session nameやfederation属性はCloudTrailへ現れ得るため、人名�
 
 - npm lockfileをcommit
 - CIは `npm ci --ignore-scripts`
+- production dependencyにhigh severity audit findingがあればCI fail
 - supported Node.js versionでtest
 - GitHub Actionsをcommit SHA pin
+- npm / GitHub ActionsをDependabot version update対象にする
 - runtime dependencyを小さく維持
 - `npm pack --dry-run` で公開package形状を確認
 
@@ -130,6 +142,7 @@ npm公開時は長期npm tokenをrepository secretへ保存する方式より、
 - local static-key fallbackは提供しない。
 - compromise済みCloud Run processは保護できない。
 - application-level idempotencyは提供しない。
+- allowlist済みhostであってもpath/method/query/payloadを自動authorizationしない。
 - すべてのAWS partition/provider combination対応を暗黙に保証しない。
 
 ## Vulnerability report
