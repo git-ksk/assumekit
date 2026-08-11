@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
 
+const E2E_REQUEST_TIMEOUT_MS = 15_000;
+
 function required(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
@@ -35,7 +37,10 @@ const awsFetch = createAwsFetch({
   retries: 0,
 });
 
-const response = await awsFetch(endpoint, { redirect: "error" });
+const response = await awsFetch(endpoint, {
+  redirect: "error",
+  signal: AbortSignal.timeout(E2E_REQUEST_TIMEOUT_MS),
+});
 if (!response.ok) {
   throw new Error(`Cloud Run → AWS E2E failed with HTTP ${response.status}.`);
 }
