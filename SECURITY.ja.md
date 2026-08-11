@@ -34,7 +34,7 @@ AssumeKit は、長期 AWS access key や Google service-account key file を保
 - identity token と temporary credential をログへ出さない
 - `sessionName` に人名、メール、顧客IDなど不要なPIIを入れない
 - dependency / GitHub Actions / release pipeline の supply-chain controls を保つ
-- 実行環境自体の侵害やSSRF等を別レイヤーで防御する
+- 実行環境自体の侵害やSSRF、application-level authorization failureを別レイヤーで防御する
 
 詳細な境界と非対応範囲は [セキュリティモデル](docs/security-model.ja.md) を参照してください。
 
@@ -51,7 +51,11 @@ Google ID token も credential exchange に使用するための短期値とし�
 - public API は任意 STS endpoint を受け付けず、設定された AWS region から Regional STS endpoint を導出します。
 - STS request は HTTPS を使用し、redirect を追従しません。
 - credential acquisition には bounded timeout / bounded retry を使用します。
+- `createAwsFetch()` は signed AWS service request に exact HTTPS `allowedHosts` allowlist を必須にします。
+- signed AWS service request 自体も redirect を拒否し、検証済みrequestがallowlist外へredirect追従しないようにします。
 - SigV4 署名済み AWS service request は automatic retry `0` が default です。非冪等操作の意図しない再送を避けるためです。
+
+host allowlistはpath、method、query、payloadをauthorizationしません。application-level authorizationは別途必要です。
 
 ## IAM trust policy
 
@@ -61,7 +65,7 @@ AssumeKit の GCP → AWS 構成では、service account の stable numeric uniq
 
 `AccessDenied` を解消する目的で `aud` / `oaud` / `sub` 条件を削除することは推奨しません。
 
-## Retry
+## Retry / request lifetime
 
 Credential取得の retry と、AWS service call の retry は別物です。
 
@@ -69,6 +73,8 @@ Credential取得の retry と、AWS service call の retry は別物です。
 - AWS service call: default `0`
 
 `retries` を有効にする場合は、対象requestが再送可能かを呼び出し側で判断してください。特に POST、MCP tool call、状態変更APIは二重実行の可能性があります。
+
+AssumeKitはapplication側のすべてのsigned requestに一律timeoutを強制しません。service-call deadlineが必要な場合は `AbortSignal.timeout(...)` 等を `signal` として渡してください。release E2Eではsmoke requestに明示的な上限を設定しています。
 
 ## Logging
 
@@ -79,6 +85,7 @@ Credential取得の retry と、AWS service call の retry は別物です。
 - Authorization header
 - SigV4署名済みrequestの機密header
 - private key material
+- customer data
 
 AWS Role ARNやaccount IDも必ずしもsecretではありませんが、public repositoryやIssueへ本番値を載せる必要はありません。exampleではplaceholderを使用してください。
 

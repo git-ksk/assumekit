@@ -131,6 +131,40 @@ describe("createAwsFetch", () => {
     expect(identityCalls).toBe(0);
   });
 
+  it("forces signed service requests to reject redirects", async () => {
+    let targetRedirect: RequestRedirect | undefined;
+    const identity: WorkloadIdentityProvider = {
+      name: "test",
+      async getToken() {
+        return "jwt-token";
+      },
+    };
+
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = requestUrl(input);
+      if (url.startsWith("https://sts.")) {
+        return new Response(successXml(), { status: 200 });
+      }
+      targetRedirect = input instanceof Request ? input.redirect : init?.redirect;
+      return new Response("redirect", {
+        status: 302,
+        headers: { location: "https://attacker.example/" },
+      });
+    };
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const awsFetch = createAwsFetch({
+      roleArn: ROLE_ARN,
+      region: "us-east-1",
+      service: "execute-api",
+      identity,
+      allowedHosts: [TARGET_HOST],
+    });
+
+    await awsFetch(`https://${TARGET_HOST}/redirect`, { redirect: "follow" });
+    expect(targetRedirect).toBe("error");
+  });
+
   it("requires explicit, host-only allowedHosts configuration", () => {
     const identity: WorkloadIdentityProvider = {
       name: "test",

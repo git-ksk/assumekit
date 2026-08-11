@@ -20,6 +20,7 @@ behaviorを変更する場合はtestを追加または更新してください�
 
 ```bash
 npm ci
+npm audit --audit-level=high
 npm run typecheck
 npm test
 npm run build
@@ -52,7 +53,7 @@ exampleでは `<AWS_ACCOUNT_ID>`、`example-project`、`example-*` 等の明確�
 - OIDC claim / audience handling
 - Google metadata request
 - STS endpoint selection
-- redirect policy
+- signed-request host allowlisting / redirect policy
 - timeout / retry behavior
 - credential cache / refresh
 - SigV4 signing
@@ -90,7 +91,7 @@ SigV4 HTTP access
 
 ## Documentation
 
-public API、設定値、security behaviorを変更した場合は、英語版だけでなく対応する日本語ドキュメントも更新してください。
+public API、設定値、release process、security behaviorを変更した場合は、英語版だけでなく対応する日本語ドキュメントも同時に更新してください。
 
 日本語ドキュメント一覧は [docs/README.ja.md](docs/README.ja.md) にあります。
 

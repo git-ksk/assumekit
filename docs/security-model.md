@@ -65,7 +65,9 @@ These choices reduce the chance that an identity token is accidentally posted to
 - has no URL credentials; and
 - exactly matches an allowlisted host, including a non-default port when one is used.
 
-This prevents untrusted request input from selecting an arbitrary destination for a SigV4-signed request under normal library use. The allowlist is host-level only; application authorization must still control paths, methods, query parameters, and payloads.
+Signed AWS service requests also force `redirect: error`. This keeps a validated request from following a redirect to a different destination after the initial host check.
+
+The allowlist is host-level only. Application authorization must still control paths, methods, query parameters, and payloads.
 
 ### Temporary credentials stay in memory
 
@@ -109,6 +111,10 @@ Container/runtime hardening and least-privilege IAM remain required.
 
 The signed-host allowlist prevents callers from switching to an arbitrary destination host, but it does not decide whether a particular path, method, query string, or payload is authorized. Do not expose a generic signed-request proxy to untrusted users without an application-level authorization model.
 
+### Request lifetime
+
+Credential-acquisition requests have library-level timeouts. Signed application service calls keep normal `fetch()` cancellation semantics instead of imposing one global deadline. Callers that need a deadline should pass an `AbortSignal`, for example `AbortSignal.timeout(...)`.
+
 ### Request replay when enabling service retries
 
 `retries` defaults to `0`. If you enable retries, understand the target operation's idempotency behavior. The library cannot infer whether an arbitrary MCP/API POST is safe to replay.
@@ -125,7 +131,7 @@ The repository currently:
 
 - uses a committed npm lockfile;
 - uses `npm ci --ignore-scripts` in CI;
-- fails CI on high-severity production dependency audit findings;
+- fails CI on high-severity dependency audit findings, including development/build-time dependencies;
 - runs tests on supported Node.js versions;
 - pins GitHub Actions to commit SHAs;
 - enables Dependabot version updates for npm and GitHub Actions;
@@ -143,6 +149,7 @@ The intended npm release path is Trusted Publishing/OIDC with provenance rather 
 - It does not protect a compromised Cloud Run process.
 - It does not automatically provide application-level idempotency.
 - It does not authorize request paths, methods, query strings, or payloads merely because the host is allowlisted.
+- It does not impose one default timeout on every signed application service call.
 - It does not currently support every AWS partition/provider combination; support should be treated as explicit, not inferred.
 
 ## Reporting vulnerabilities
