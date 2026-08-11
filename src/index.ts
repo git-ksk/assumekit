@@ -27,7 +27,71 @@ function defaultSessionName(): string {
   return `assumekit-${Date.now()}`;
 }
 
-function validateCreateOptions(options: CreateAwsFetchOptions): void {
+function normalizeAllowedHost(host: string): string {
+  if (!host || host.trim() !== host) {
+    throw new Error("allowedHosts entries must be non-empty host names without surrounding whitespace.");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(`https://${host}/`);
+  } catch {
+    throw new Error(`allowedHosts contains an invalid host: ${host}`);
+  }
+
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error(
+      `allowedHosts entries must contain only a host name and optional port: ${host}`,
+    );
+  }
+
+  return parsed.host.toLowerCase();
+}
+
+function validateAllowedHosts(allowedHosts: readonly string[]): Set<string> {
+  if (!Array.isArray(allowedHosts) || allowedHosts.length === 0) {
+    throw new Error("allowedHosts must contain at least one HTTPS request host.");
+  }
+
+  const normalized = new Set<string>();
+  for (const host of allowedHosts) {
+    if (typeof host !== "string") {
+      throw new Error("allowedHosts entries must be strings.");
+    }
+    normalized.add(normalizeAllowedHost(host));
+  }
+  return normalized;
+}
+
+function validateRequestTarget(
+  input: RequestInfo | URL,
+  allowedHosts: ReadonlySet<string>,
+): void {
+  let target: URL;
+  try {
+    target = input instanceof Request ? new URL(input.url) : new URL(String(input));
+  } catch {
+    throw new Error("AWS request target must be an absolute HTTPS URL.");
+  }
+
+  if (target.protocol !== "https:") {
+    throw new Error("AWS request target must use HTTPS.");
+  }
+  if (target.username || target.password) {
+    throw new Error("AWS request target must not include URL credentials.");
+  }
+  if (!allowedHosts.has(target.host.toLowerCase())) {
+    throw new Error(`AWS request host is not allowed: ${target.host}`);
+  }
+}
+
+function validateCreateOptions(options: CreateAwsFetchOptions): Set<string> {
   if (!options.roleArn) throw new Error("roleArn is required.");
   if (!options.region || !/^[a-z0-9-]+$/.test(options.region)) {
     throw new Error("region must contain only lowercase letters, digits, and hyphens.");
@@ -38,6 +102,8 @@ function validateCreateOptions(options: CreateAwsFetchOptions): void {
   if (!options.identity || typeof options.identity.getToken !== "function") {
     throw new Error("identity must provide getToken().");
   }
+
+  const allowedHosts = validateAllowedHosts(options.allowedHosts);
 
   const refreshBeforeMs = options.refreshBeforeMs ?? DEFAULT_REFRESH_BEFORE_MS;
   if (!Number.isFinite(refreshBeforeMs) || refreshBeforeMs < 0) {
@@ -56,10 +122,12 @@ function validateCreateOptions(options: CreateAwsFetchOptions): void {
   if (options.retries !== undefined) {
     assertNonNegativeInteger(options.retries, "retries");
   }
+
+  return allowedHosts;
 }
 
 export function createAwsFetch(options: CreateAwsFetchOptions): AwsFetch {
-  validateCreateOptions(options);
+  const allowedHosts = validateCreateOptions(options);
 
   const refreshBeforeMs = options.refreshBeforeMs ?? DEFAULT_REFRESH_BEFORE_MS;
   let credentials: AwsTemporaryCredentials | undefined;
@@ -110,6 +178,7 @@ export function createAwsFetch(options: CreateAwsFetchOptions): AwsFetch {
   }
 
   return async (input, init) => {
+    validateRequestTarget(input, allowedHosts);
     const aws = await getClient();
     return aws.fetch(input, init);
   };
