@@ -55,7 +55,7 @@ The cloud setup is intentionally explicit; AssumeKit does not auto-provision IAM
 3. Choose a workload-specific token **audience**.
 4. Create an AWS IAM role whose **trust policy** pins the Google service-account identity and audience.
 5. Attach a separate least-privilege **permissions policy** for the AWS API the workload needs.
-6. Attach the Google service account to Cloud Run and configure `roleArn`, `region`, `service`, and `audience` in the application.
+6. Attach the Google service account to Cloud Run and configure `roleArn`, `region`, `service`, `audience`, and the allowed AWS request host in the application.
 
 For copy/paste `gcloud` and AWS CLI examples, start with **[Cloud Run → AWS getting started](docs/getting-started.md)**.
 
@@ -76,6 +76,7 @@ npm install assumekit
 ```ts
 import { createAwsFetch, gcpMetadataIdentity } from "assumekit";
 
+const endpoint = new URL(process.env.AWS_ENDPOINT!);
 const awsFetch = createAwsFetch({
   roleArn: process.env.AWS_ROLE_ARN!,
   region: process.env.AWS_REGION!,
@@ -83,9 +84,10 @@ const awsFetch = createAwsFetch({
   identity: gcpMetadataIdentity({
     audience: process.env.AWS_OIDC_AUDIENCE!,
   }),
+  allowedHosts: [endpoint.host],
 });
 
-const response = await awsFetch(process.env.AWS_ENDPOINT!);
+const response = await awsFetch(endpoint);
 ```
 
 Example non-secret configuration:
@@ -102,6 +104,8 @@ No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, Google service-account private-
 
 `service` is the AWS **SigV4 signing name**, which is not always the same as the product name. API Gateway IAM authorization uses `execute-api`; confirm the signing name for other services in AWS documentation.
 
+`allowedHosts` is an exact allowlist for signed request destinations. It accepts host names with an optional port, not schemes or paths. Deriving it from a trusted configured `AWS_ENDPOINT` as shown above avoids allowing untrusted request destinations.
+
 ## Documentation
 
 | Topic | English | 日本語 |
@@ -116,6 +120,7 @@ No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, Google service-account private-
 - **Regional STS** — derives the Regional AWS STS endpoint from `region` instead of accepting a legacy/global default.
 - **No arbitrary STS endpoint in the public API** — normal configuration cannot post the workload ID token to a caller-supplied STS host.
 - **No redirect following for identity exchange** — GCP metadata and STS requests use redirect rejection.
+- **Explicit signed-host allowlist** — every signed AWS service request must use HTTPS and match an exact `allowedHosts` entry.
 - **Short timeouts** — GCP metadata requests default to 3 seconds per attempt; STS requests default to 10 seconds per attempt.
 - **Credential-only retries** — metadata and STS transient failures retry a limited number of times with exponential full jitter.
 - **No implicit service-call retries** — signed AWS requests default to `retries: 0`, avoiding accidental replay of non-idempotent MCP/API calls.
@@ -135,6 +140,7 @@ Credential retries and AWS service-call retries are deliberately separate. You c
 | `region` | yes | — | Target AWS region and STS region |
 | `service` | yes | — | SigV4 signing service name, such as `execute-api` |
 | `identity` | yes | — | Workload identity provider |
+| `allowedHosts` | yes | — | Exact HTTPS hosts allowed for signed service requests |
 | `sessionName` | no | generated | STS role session name; avoid PII |
 | `durationSeconds` | no | AWS default | 900–43200, subject to the IAM role maximum |
 | `refreshBeforeMs` | no | 300000 | Refresh temporary credentials before expiry |
@@ -173,6 +179,7 @@ Included:
 - in-memory temporary credential caching and early refresh;
 - concurrent refresh de-duplication;
 - bounded timeout/retry behavior for credential acquisition;
+- explicit HTTPS signed-request host allowlisting;
 - SigV4 `fetch()` wrapper;
 - Node.js 22+ / TypeScript.
 
@@ -192,6 +199,8 @@ The provider interface is intentionally small so other OIDC workload sources suc
 ## Local development
 
 `gcpMetadataIdentity()` intentionally relies on the Google metadata server and therefore does not work on a normal local laptop. For unit tests, inject a test `WorkloadIdentityProvider`; do not add a production long-lived-key fallback merely to simulate Cloud Run.
+
+The repository includes `npm run e2e:cloud-run` for the release-blocking real-cloud smoke test. It intentionally refuses to run outside a Cloud Run revision and uses the configured `AWS_ENDPOINT` host as the exact signed-request allowlist.
 
 ## Security
 
