@@ -2,13 +2,16 @@
 
 [English documentation](README.md)
 
-AssumeKit は現在、**Google Cloud Run → Google service-account ID token → AWS STS → temporary AWS credentials → SigV4 HTTP request** の経路を中心に実装・検証しています。
+AssumeKit は現在、**Google Cloud Run → Google service-account ID token → AWS STS → temporary AWS credentials → constrained SigV4 HTTP request** の経路を中心に実装・検証しています。
+
+基礎となるfederation mechanism自体は標準技術です。AssumeKitはworkload identity、credential exchange、lifecycle管理、fetch-style SigV4 interfaceをまとめる薄いsecurity-opinionated application layerです。
 
 ## まず読むもの
 
 | 内容 | 日本語 | English |
 | --- | --- | --- |
 | Project概要 / API | [README](../README.ja.md) | [README](../README.md) |
+| Roadmap / provider compatibility contract | [Roadmap](roadmap.ja.md) | [Roadmap](roadmap.md) |
 | End-to-end設定 | [Cloud Run → AWS セットアップ](getting-started.ja.md) | [Getting started](getting-started.md) |
 | Release前の実Cloud E2E | [Cloud Run E2E runbook](cloud-run-e2e.ja.md) | [Cloud Run E2E runbook](cloud-run-e2e.md) |
 | AWS/GCP trust詳細 | [GCP → AWS trust policy](gcp-aws-trust.ja.md) | [GCP → AWS trust policy](gcp-aws-trust.md) |
@@ -20,12 +23,13 @@ AssumeKit は現在、**Google Cloud Run → Google service-account ID token →
 
 ## 推奨順序
 
-1. [日本語README](../README.ja.md) で目的、API、現在のscopeを確認する。
-2. [セットアップガイド](getting-started.ja.md) に沿って Cloud Run service identity と AWS IAM Role を構成する。
-3. production accountで使う前に [GCP → AWS trust policy](gcp-aws-trust.ja.md) を確認する。
-4. [セキュリティモデル](security-model.ja.md) で threat boundary と非対応範囲を確認する。
-5. 初回npm release前に、release対象commitから [実Cloud Run → AWS E2E runbook](cloud-run-e2e.ja.md) を実行する。
-6. metadata / STS / allowlist / SigV4 / E2E startup のどこかで失敗したら [トラブルシューティング](troubleshooting.ja.md) で段階的に切り分ける。
+1. [日本語README](../README.ja.md) で目的、API、隣接approachとの違いを確認する。
+2. [Roadmap](roadmap.ja.md) でv0.1 boundary、SigV4 endpointのcompatibility前提、provider security contractを確認する。
+3. [セットアップガイド](getting-started.ja.md) に沿って Cloud Run service identity と AWS IAM Role を構成する。
+4. production accountで使う前に [GCP → AWS trust policy](gcp-aws-trust.ja.md) を確認する。
+5. [セキュリティモデル](security-model.ja.md) で threat boundary と非対応範囲を確認する。
+6. 初回npm release前に、release対象commitから [実Cloud Run → AWS E2E runbook](cloud-run-e2e.ja.md) を実行する。
+7. metadata / STS / allowlist / SigV4 / E2E startup のどこかで失敗したら [トラブルシューティング](troubleshooting.ja.md) で段階的に切り分ける。
 
 ## AWS側で混同しやすい2つのPolicy
 
@@ -56,7 +60,7 @@ repositoryとdocumentationは設計review・実装review・testに使用でき�
 
 ## 日本語版の扱い
 
-日本語ドキュメントは英語版と同じ機能・安全上の意味を維持する方針です。コードやpublic APIを変更する際は、対応する日英ドキュメントを同時に更新します。
+日本語ドキュメントは英語版と同じ機能・安全上の意味を維持する方針です。コードやpublic API、scope、release processを変更する際は、対応する日英ドキュメントを同時に更新します。
 
 ## License
 
