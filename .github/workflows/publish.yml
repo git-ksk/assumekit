@@ -107,5 +107,8 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
+      - name: Smoke test packed consumer install
+        run: npm run smoke:consumer
+
       - name: Publish to npm with Trusted Publishing
         run: npm publish --access public --tag "$DIST_TAG" --provenance
