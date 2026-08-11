@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { createAwsFetch, gcpMetadataIdentity } from "../dist/index.js";
 
 function required(name) {
@@ -34,3 +35,16 @@ if (!response.ok) {
 }
 
 console.log(`Cloud Run → AWS E2E passed with HTTP ${response.status}.`);
+
+const port = Number.parseInt(process.env.PORT ?? "8080", 10);
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+  throw new Error("PORT must be a valid TCP port.");
+}
+
+createServer((_request, serverResponse) => {
+  serverResponse.statusCode = 200;
+  serverResponse.setHeader("content-type", "text/plain; charset=utf-8");
+  serverResponse.end("AssumeKit Cloud Run → AWS E2E passed.\n");
+}).listen(port, "0.0.0.0", () => {
+  console.log(`E2E health server listening on port ${port}.`);
+});
