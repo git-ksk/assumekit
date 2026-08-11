@@ -23,6 +23,7 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:docs": "node scripts/check-doc-links.mjs",
     "smoke:consumer": "node scripts/consumer-smoke.mjs",
     "e2e:cloud-run": "node scripts/cloud-run-e2e.mjs",
     "prepack": "npm run build"
