@@ -65,7 +65,9 @@ Cloud Run service identityを起点に、Google-signed ID tokenをtemporary AWS 
 - URL credentialを含まない。
 - non-default portを使う場合はportも含めて、`allowedHosts` のhostと完全一致する。
 
-これにより、通常利用ではuntrusted request inputから任意hostへSigV4署名requestを送る経路を防ぎます。ただしallowlistはhost単位です。path、HTTP method、query、payloadのauthorizationはapplication側で必要です。
+signed AWS service request自体も `redirect: error` を強制します。最初のhost validation後に別destinationへredirect追従する経路を残しません。
+
+ただしallowlistはhost単位です。path、HTTP method、query、payloadのauthorizationはapplication側で必要です。
 
 ### Temporary credentialはメモリだけ
 
@@ -109,6 +111,10 @@ Cloud Run container/process内で任意コード実行を奪われた場合、As
 
 signed-host allowlistは送信先hostの任意切替を防ぎますが、特定path、HTTP method、query、payloadを許可してよいかまでは判断しません。untrusted user向けにgenericなsigned-request proxyを公開する場合は、application-level authorizationを別途実装してください。
 
+### Request lifetime
+
+Credential取得requestにはlibrary-level timeoutがあります。一方、signed application service callは一律deadlineを強制せず、通常の `fetch()` cancellation semanticsを維持します。deadlineが必要な呼び出しでは `AbortSignal.timeout(...)` 等を `signal` として渡してください。
+
 ### service retryを有効にした場合のreplay
 
 `retries` defaultは `0` です。値を増やす場合、対象operationのidempotencyを利用者側で保証する必要があります。任意MCP/API POSTが再送可能かをライブラリは判断できません。
@@ -125,7 +131,7 @@ Role session nameやfederation属性はCloudTrailへ現れ得るため、人名�
 
 - npm lockfileをcommit
 - CIは `npm ci --ignore-scripts`
-- production dependencyにhigh severity audit findingがあればCI fail
+- development/build-time dependencyを含むdependency全体にhigh severity audit findingがあればCI fail
 - supported Node.js versionでtest
 - GitHub Actionsをcommit SHA pin
 - npm / GitHub ActionsをDependabot version update対象にする
@@ -143,6 +149,7 @@ npm公開時は長期npm tokenをrepository secretへ保存する方式より、
 - compromise済みCloud Run processは保護できない。
 - application-level idempotencyは提供しない。
 - allowlist済みhostであってもpath/method/query/payloadを自動authorizationしない。
+- signed application service callすべてに一律timeoutを自動適用しない。
 - すべてのAWS partition/provider combination対応を暗黙に保証しない。
 
 ## Vulnerability report
