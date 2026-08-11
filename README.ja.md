@@ -106,11 +106,14 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 
 `allowedHosts` はSigV4署名を許可する送信先hostの完全一致allowlistです。schemeやpathは受け付けません。上の例のように、信頼済みの `AWS_ENDPOINT` から `host` を取得して渡すのが安全です。
 
+signed AWS service requestはcallerが追従を指定してもredirectを拒否します。最終canonical HTTPS endpointを直接設定してください。またapplication service callすべてに一律timeoutは強制しないため、deadlineが必要なoperationでは `AbortSignal.timeout(...)` 等を `signal` として渡します。
+
 ## ドキュメント
 
 | 内容 | English | 日本語 |
 | --- | --- | --- |
 | End-to-end設定 | [Getting started](docs/getting-started.md) | [セットアップガイド](docs/getting-started.ja.md) |
+| Release-blocking実Cloud E2E | [Cloud Run E2E runbook](docs/cloud-run-e2e.md) | [Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) |
 | Google → AWS IAM trust | [Trust policy](docs/gcp-aws-trust.md) | [Trust policy](docs/gcp-aws-trust.ja.md) |
 | エラー切り分け | [Troubleshooting](docs/troubleshooting.md) | [トラブルシューティング](docs/troubleshooting.ja.md) |
 | 脅威・境界・非対応 | [Security model](docs/security-model.md) | [セキュリティモデル](docs/security-model.ja.md) |
@@ -124,6 +127,7 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 - public API から任意STS endpointの指定を排除
 - GCP metadata / STS request はredirectを追従しない
 - SigV4署名するAWS service requestはHTTPSかつ `allowedHosts` 完全一致を必須化
+- signed AWS service request自体もredirectを拒否
 - GCP metadata は1試行3秒、STSは1試行10秒でtimeout
 - metadata / STSの一時障害だけを限定retry
 - SigV4署名後のAWS API/MCP呼び出しはretry `0` がdefault
@@ -131,7 +135,7 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 - 同時request時のCredential refreshを1回へ集約
 - GCP metadataの危険なpath segmentをreject
 
-AWS service callのretryは `retries` で明示的に有効化できますが、POST等の非冪等requestでは二重実行に注意してください。
+AWS service callのretryは `retries` で明示的に有効化できますが、POST等の非冪等requestでは二重実行に注意してください。service-call deadlineが必要な場合はcaller側で `AbortSignal` を渡してください。
 
 ## 設定項目
 
@@ -183,6 +187,7 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 - 同時refreshの重複排除
 - Credential取得時のtimeout / bounded retry
 - signed request送信先のHTTPS host allowlist
+- signed AWS service requestのredirect拒否
 - SigV4 `fetch()`
 - Node.js 22+ / TypeScript
 
@@ -194,6 +199,7 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 - proxy/daemon mode
 - automatic IAM provisioning
 - browser support
+- signed application service callすべてへの一律timeout
 - non-idempotent AWS requestの自動retry
 - すべてのcloud/provider/AWS partition combinationの暗黙対応
 
@@ -203,7 +209,7 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 
 `gcpMetadataIdentity()` はGoogle metadata serverを利用するため、通常のローカルPCでは動きません。unit testではtest用 `WorkloadIdentityProvider` を注入してください。Cloud Runを再現するためだけにproduction codeへ長期key fallbackを追加する方針ではありません。
 
-release-blockingの実Cloud E2E用に `npm run e2e:cloud-run` を用意しています。このcommandはCloud Run revision外では意図的に失敗し、設定済み `AWS_ENDPOINT` のhostだけを署名先として許可します。
+release-blockingの実Cloud E2E用に `npm run e2e:cloud-run` を用意しています。このcommandはCloud Run revision外では意図的に失敗します。[Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) に従うと、buildpack runtime固定、`AWS_ENDPOINT` host完全一致allowlist、redirect拒否、最終smoke requestのtimeoutまで含めて実行できます。
 
 ## Security
 
