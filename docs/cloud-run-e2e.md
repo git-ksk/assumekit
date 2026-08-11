@@ -51,15 +51,16 @@ gcloud run deploy "$E2E_SERVICE" \
   --project "$GCP_PROJECT_ID" \
   --region "$GCP_REGION" \
   --service-account "$GCP_SERVICE_ACCOUNT_EMAIL" \
+  --set-build-env-vars "GOOGLE_NODEJS_VERSION=24.x.x" \
   --command npm \
   --args run,e2e:cloud-run \
   --no-allow-unauthenticated \
   --set-env-vars "AWS_ROLE_ARN=${AWS_ROLE_ARN},AWS_REGION=${AWS_REGION},AWS_SERVICE=${AWS_SERVICE},AWS_OIDC_AUDIENCE=${AWS_OIDC_AUDIENCE},AWS_ENDPOINT=${AWS_ENDPOINT}"
 ```
 
-Cloud Run source deployment uses Google Cloud buildpacks when the repository has no Dockerfile. AssumeKit defines `gcp-build` so `dist/` is produced during image build, while the runtime E2E command only executes the smoke test and does not require the TypeScript compiler to remain installed.
+Cloud Run source deployment uses Google Cloud buildpacks when the repository has no Dockerfile. The E2E command pins the buildpack runtime to Node.js 24 with `GOOGLE_NODEJS_VERSION`; this avoids relying on the package's broad npm compatibility range to choose the Cloud Run runtime. AssumeKit defines `gcp-build` so `dist/` is produced during image build, while the runtime E2E command only executes the smoke test and does not require the TypeScript compiler to remain installed.
 
-The normal Cloud Run deployment health check is useful here: the E2E process does not listen on `0.0.0.0:$PORT` until the AWS request succeeds. A metadata, STS, signing, allowlist, or target-service failure therefore prevents the revision from becoming healthy.
+The normal Cloud Run deployment health check is useful here: the E2E process does not listen on `0.0.0.0:$PORT` until the AWS request succeeds. A metadata, STS, signing, allowlist, redirect, timeout, or target-service failure therefore prevents the revision from becoming healthy. The final AWS smoke request is bounded to 15 seconds and signed service redirects are rejected.
 
 ## 3. Confirm the result
 
@@ -84,7 +85,8 @@ Confirm all of the following before closing the release gate:
 - the real metadata token request succeeded;
 - Regional STS `AssumeRoleWithWebIdentity` succeeded;
 - the signed HTTPS request reached only the exact configured `AWS_ENDPOINT` host;
-- the target returned a successful HTTP status;
+- no service redirect was followed;
+- the target returned a successful HTTP status within the bounded smoke timeout;
 - no Google ID token, AWS temporary credential, or Authorization header appears in application logs;
 - AWS CloudTrail shows the intended `AssumeRoleWithWebIdentity` path without an unexpected role/session identity.
 
@@ -109,8 +111,11 @@ The E2E service is not intended to remain deployed as a production API.
 | --- | --- |
 | `K_SERVICE` error | The command is not running inside a Cloud Run service revision. |
 | `Cannot find ... dist/index.js` | The image was not built from the repository root or the `gcp-build` step did not complete. |
+| Node/buildpack version error | Confirm `GOOGLE_NODEJS_VERSION=24.x.x` is present in the build environment. |
 | `AWS_ENDPOINT must use HTTPS` | Configure an HTTPS target only. |
 | signed request host / `allowedHosts` error | `AWS_ENDPOINT` is not the exact trusted host expected by the smoke test. Do not widen the allowlist to arbitrary input. |
+| redirect error | The target attempted to redirect. Use the final canonical AWS HTTPS endpoint instead of enabling redirect following. |
+| request abort/timeout | The target did not answer within the 15-second smoke bound; inspect endpoint health/networking instead of removing the bound. |
 | metadata error/timeout | Verify the revision service account and Google metadata availability. |
 | STS `InvalidIdentityToken` / `AccessDenied` | Verify `aud` / `oaud` / `sub`, audience, and role ARN. Do not loosen the trust policy to make the test pass. |
 | target `403` / `AccessDenied` | Verify the assumed role's permissions policy, not the federation trust policy. |
