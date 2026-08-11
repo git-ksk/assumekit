@@ -15,6 +15,8 @@ AssumeKit has three distinct network/authentication stages. Identify which stage
 | `allowedHosts must contain at least one HTTPS request host` | Local configuration | Provide one or more exact trusted hosts, without schemes or paths. |
 | `AWS request host is not allowed` | Local request validation | The requested URL host must exactly match an `allowedHosts` entry. Do not widen the allowlist for untrusted input. |
 | `AWS request target must use HTTPS` | Local request validation | Use an HTTPS target only. |
+| redirect-related fetch error | AWS service | Use the final canonical HTTPS endpoint; signed service redirects are intentionally rejected. |
+| service request abort/timeout | AWS service | Check the caller-provided `AbortSignal` deadline and target/network health. |
 | `Failed to obtain GCP identity token` | GCP metadata | Is the process actually running on Cloud Run/Google Cloud with the intended service account? |
 | metadata timeout | GCP metadata | Runtime environment, metadata access, custom `serviceAccount` value |
 | STS `InvalidIdentityToken` | AWS STS | audience and Google claim mapping in trust policy |
@@ -129,6 +131,24 @@ If STS succeeds but the target AWS service rejects the request, the problem is u
 
 The trust policy answers "who can assume the role?". The permissions policy answers "what can the assumed role do?".
 
+### Redirect-related fetch error
+
+AssumeKit forces signed AWS service requests to use `redirect: "error"`. A redirect is not followed, even if the caller supplies `redirect: "follow"`.
+
+Use the final canonical AWS HTTPS endpoint instead of enabling redirect following. This keeps the signed-request destination inside the host boundary that was validated before credential use.
+
+### Service request deadline / timeout
+
+AssumeKit applies built-in timeouts to metadata and STS credential acquisition, but does not impose one timeout on every application service request. If your application requires a deadline, pass a signal:
+
+```ts
+await awsFetch(endpoint, {
+  signal: AbortSignal.timeout(15_000),
+});
+```
+
+Choose the timeout for the target operation and workload. Do not remove all bounds merely to hide a slow or unreachable endpoint.
+
 ### `SignatureDoesNotMatch`
 
 Check:
@@ -163,7 +183,7 @@ The Cloud Run image must be built from the repository root. The project defines 
 
 This is expected when the identity chain or AWS smoke request fails. The E2E process starts listening on `0.0.0.0:$PORT` only after the signed AWS request succeeds, so Cloud Run's deployment health check acts as part of the release gate.
 
-Read the service logs first and identify whether the failure is local validation, metadata, STS, or the target AWS service. Do not disable the health behavior or loosen IAM merely to make the revision start.
+Read the service logs first and identify whether the failure is local validation, metadata, STS, redirect/timeout, or the target AWS service. Do not disable the health behavior or loosen IAM merely to make the revision start.
 
 ## Credential refresh behavior
 
