@@ -2,27 +2,29 @@
 
 **外部クラウドの Workload Identity から、長期アクセスキーなしで AWS を呼び出すための軽量ライブラリ。**
 
-AssumeKit は、AWS 外部の workload から OIDC federation で短期 AWS Credential を取得し、SigV4 署名済み HTTP request を送る TypeScript/Node.js ライブラリです。
+AssumeKit は、AWS 外部の workload から OIDC federation で短期 AWS Credential を取得し、制約付きSigV4 HTTP requestを送るTypeScript/Node.jsライブラリです。
 
-最初の対象は **Google Cloud Run → Google service-account ID token → AWS STS `AssumeRoleWithWebIdentity` → 一時 Credential → SigV4 `fetch()`** です。
+最初の対象は **Google Cloud Run → Google service-account ID token → AWS STS `AssumeRoleWithWebIdentity` → 一時Credential → constrained SigV4 `fetch()`** です。
 
-> 現在は **early alpha** です。v1.0 までは公開 API が変更される可能性があります。初回 npm release は実 Cloud Run → AWS E2E が完了するまで行いません。
+> 現在は **early alpha** です。v1.0までは公開APIが変更される可能性があります。初回npm releaseは実Cloud Run → AWS E2Eが完了するまで行いません。
 
-AssumeKit は独立した OSS であり、Amazon Web Services の公式プロジェクトではありません。
+AssumeKit は独立したOSSであり、Amazon Web Servicesの公式プロジェクトではありません。
 
-[English README](README.md) · [日本語ドキュメント一覧](docs/README.ja.md)
+[English README](README.md) · [日本語ドキュメント](docs/README.ja.md) · [Roadmap](docs/roadmap.ja.md)
 
 ## 何を簡単にするか
 
-Cloud Run から SigV4 保護された AWS endpoint を呼ぶ場合、通常は次の glue code が必要です。
+Google → AWSのworkload-identity federation mechanism自体は標準技術です。AssumeKitは**新しいfederation protocolを発明するものではありません**。
 
-1. Google metadata server から service-account ID token を取得
-2. AWS STS `AssumeRoleWithWebIdentity` で一時 Credential に交換
-3. Credential の cache と期限前 refresh
-4. 各 HTTP request を SigV4 署名
-5. token / temporary Credential をログや永続storageへ漏らさない
+価値は、application側で繰り返し必要になる次のglue codeを、安全側のdefaultとともにまとめることです。
 
-AssumeKit はこれを通常の `fetch()` に近い API へまとめます。Cloud Run runtime に sidecar、常駐 proxy、AWS CLI、Google auth SDK、AWS SDK 全体を必須にはしません。
+1. platformのidentity sourceから短期workload identity tokenを取得
+2. AWS STS `AssumeRoleWithWebIdentity` でtemporary credentialへ交換
+3. temporary AWS credentialをcache・期限前refresh
+4. 送信先を制約してSigV4 HTTP requestを生成
+5. identity token / temporary credentialをログや永続storageへ漏らさない
+
+これを小さな`fetch()`-style APIへまとめ、sidecar/proxy、static AWS key、Google service-account JSON key、runtime APIにおけるAWS SDK credential stack全体を必須にしません。
 
 ```text
 Cloud Run service identity
@@ -38,32 +40,38 @@ AssumeRoleWithWebIdentity
 Temporary AWS credentials
         │
         ▼
-SigV4 fetch
-        │
-        ├── AWS MCP endpoints
-        ├── API Gateway IAM auth
-        ├── OpenSearch
-        └── other SigV4 HTTP endpoints
+Constrained SigV4 fetch
 ```
+
+## 他のapproachとの違い
+
+| Approach | 向いているケース | AssumeKitとの違い |
+| --- | --- | --- |
+| metadata + STS + SigV4を自前実装 | federation flowを自分たちで組み立て・保守したい | credential lifecycleと保守的security defaultまで一連でまとめる |
+| AWS SDK credential-provider stack | AWS SDK client/provider中心のapplication | public runtime surfaceを軽量なSigV4 `fetch()` に絞る |
+| static AWS key / service-account key file | workload identityを使えないlegacy環境 | 意図的に非対応。workload identityをtrust boundaryにする |
+| sidecar/proxy credential broker | process/network mediationを中央集約したい | in-process libraryで、別service/daemonを要求しない |
+
+つまりAssumeKitは**薄いcross-cloud workload-identity fetch layer**であり、generic AWS auth framework、secret manager、IAM provisioner、AWS SDK全体の代替ではありません。この境界は [Roadmap / compatibility contract](docs/roadmap.ja.md) で固定しています。
 
 ## 最短セットアップ
 
-AssumeKit は IAM を自動provisionしません。設定を意図的に明示しています。
+AssumeKitはIAMを自動provisionしません。設定を意図的に明示しています。
 
 1. Cloud Run workload用の**専用user-managed Google service account**を作る。
 2. service accountの**stable numeric `uniqueId`**を取得する。
 3. workload/Role専用のtoken **audience**を決める。
 4. Google service-account identityとaudienceを固定したAWS IAM Role **trust policy**を作る。
 5. 対象AWS APIに必要な権限だけを別の**permissions policy**としてRoleへ付ける。
-6. Cloud Runにservice accountをattachし、アプリへ `roleArn` / `region` / `service` / `audience` / 許可するAWS request hostを設定する。
+6. Cloud Runにservice accountをattachし、`roleArn` / `region` / `service` / `audience` / 許可するAWS request hostを設定する。
 
-コピペ可能な `gcloud` / AWS CLI 例は **[Cloud Run → AWS セットアップガイド](docs/getting-started.ja.md)** にまとめています。
+コピペ可能な手順は [Cloud Run → AWS セットアップガイド](docs/getting-started.ja.md) を参照してください。
 
-> trust policy は「**誰がRoleを取得できるか**」、permissions policy は「**取得したRoleで何ができるか**」を決める別の制御です。
+> trust policyは「**誰がRoleを取得できるか**」、permissions policyは「**取得したRoleで何ができるか**」を決める別の制御です。
 
 ## インストール
 
-**まだ npm には公開していません。** 実 Cloud Run → AWS E2E を通した後に初回 alpha を公開します。
+**まだnpmには公開していません。** 実Cloud Run → AWS release-gate E2Eを通した後に初回alphaを公開します。
 
 公開後:
 
@@ -102,40 +110,40 @@ AWS_ENDPOINT=https://example.execute-api.ap-northeast-1.amazonaws.com/health
 
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / Google service-account private-key file / 手動保存したGoogle ID tokenは不要です。
 
-`service` は AWS の **SigV4 signing name** で、製品名と一致するとは限りません。API Gateway IAM auth は `execute-api` です。他サービスはAWS公式ドキュメントでsigning nameを確認してください。
+`service` はAWSの**SigV4 signing name**で、製品名と一致するとは限りません。API Gateway IAM authは`execute-api`です。他serviceはAWS公式ドキュメントでsigning nameを確認してください。
 
-`allowedHosts` はSigV4署名を許可する送信先hostの完全一致allowlistです。schemeやpathは受け付けません。上の例のように、信頼済みの `AWS_ENDPOINT` から `host` を取得して渡すのが安全です。
+`allowedHosts` はSigV4署名を許可する送信先hostの完全一致allowlistです。schemeやpathは受け付けません。信頼済み`AWS_ENDPOINT`から`host`を取得して渡す形を推奨します。
 
-signed AWS service requestはcallerが追従を指定してもredirectを拒否します。最終canonical HTTPS endpointを直接設定してください。またapplication service callすべてに一律timeoutは強制しないため、deadlineが必要なoperationでは `AbortSignal.timeout(...)` 等を `signal` として渡します。
+signed AWS service requestはcallerが追従を指定してもredirectを拒否します。最終canonical HTTPS endpointを直接指定してください。一律service-call timeoutは強制しないため、deadlineが必要なら`AbortSignal.timeout(...)`等を`signal`として渡します。
 
 ## ドキュメント
 
-| 内容 | English | 日本語 |
+| 内容 | 日本語 | English |
 | --- | --- | --- |
-| End-to-end設定 | [Getting started](docs/getting-started.md) | [セットアップガイド](docs/getting-started.ja.md) |
-| Release-blocking実Cloud E2E | [Cloud Run E2E runbook](docs/cloud-run-e2e.md) | [Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) |
-| Google → AWS IAM trust | [Trust policy](docs/gcp-aws-trust.md) | [Trust policy](docs/gcp-aws-trust.ja.md) |
-| エラー切り分け | [Troubleshooting](docs/troubleshooting.md) | [トラブルシューティング](docs/troubleshooting.ja.md) |
-| 脅威・境界・非対応 | [Security model](docs/security-model.md) | [セキュリティモデル](docs/security-model.ja.md) |
-| 脆弱性報告 | [Security policy](SECURITY.md) | [セキュリティポリシー](SECURITY.ja.md) |
-| 開発参加 | [Contributing](CONTRIBUTING.md) | [Contributing](CONTRIBUTING.ja.md) |
-| 行動規範 | [Code of Conduct](CODE_OF_CONDUCT.md) | [行動規範](CODE_OF_CONDUCT.ja.md) |
+| Roadmap / compatibility contract | [Roadmap](docs/roadmap.ja.md) | [Roadmap](docs/roadmap.md) |
+| End-to-end設定 | [セットアップガイド](docs/getting-started.ja.md) | [Getting started](docs/getting-started.md) |
+| Release-blocking実Cloud E2E | [Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) | [Cloud Run E2E runbook](docs/cloud-run-e2e.md) |
+| Google → AWS IAM trust | [Trust policy](docs/gcp-aws-trust.ja.md) | [Trust policy](docs/gcp-aws-trust.md) |
+| エラー切り分け | [トラブルシューティング](docs/troubleshooting.ja.md) | [Troubleshooting](docs/troubleshooting.md) |
+| 脅威・境界・非対応 | [セキュリティモデル](docs/security-model.ja.md) | [Security model](docs/security-model.md) |
+| 脆弱性報告 | [セキュリティポリシー](SECURITY.ja.md) | [Security policy](SECURITY.md) |
+| 開発参加 | [Contributing](CONTRIBUTING.ja.md) | [Contributing](CONTRIBUTING.md) |
 
-## 安全側のデフォルト
+## 安全側のdefault
 
-- AWS STS は `region` から Regional endpoint を自動選択
-- public API から任意STS endpointの指定を排除
-- GCP metadata / STS request はredirectを追従しない
-- SigV4署名するAWS service requestはHTTPSかつ `allowedHosts` 完全一致を必須化
+- AWS STSは`region`からRegional endpointを導出
+- public APIから任意STS endpoint指定を排除
+- GCP metadata / STS requestはredirectを拒否
+- signed AWS service requestはHTTPSかつ`allowedHosts`完全一致が必須
 - signed AWS service request自体もredirectを拒否
-- GCP metadata は1試行3秒、STSは1試行10秒でtimeout
-- metadata / STSの一時障害だけを限定retry
-- SigV4署名後のAWS API/MCP呼び出しはretry `0` がdefault
-- temporary AWS Credentialはprocess memoryだけに保持
-- 同時request時のCredential refreshを1回へ集約
+- GCP metadataは1試行3秒、STSは1試行10秒でtimeout
+- metadata / STSの一時障害だけをbounded full-jitter retry
+- AWS service-call retryはdefault `0`
+- temporary AWS credentialはprocess memoryだけに保持
+- 同時request時のcredential refreshをsingle-flight化
 - GCP metadataの危険なpath segmentをreject
 
-AWS service callのretryは `retries` で明示的に有効化できますが、POST等の非冪等requestでは二重実行に注意してください。service-call deadlineが必要な場合はcaller側で `AbortSignal` を渡してください。
+Credential retryとAWS service-call retryは別です。service-call retryを有効化する場合はreplay safetyを確認し、deadlineが必要な場合はcaller側で`AbortSignal`を渡してください。
 
 ## 設定項目
 
@@ -169,13 +177,13 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 ## IAM設定の原則
 
 - 可能ならCloud Run専用service accountを使う。
-- AWS Google federation条件では、主要なstable identifierとしてservice-account emailではなく**numeric unique ID**を使う。
+- AWS Google federation条件ではservice-account emailより**numeric unique ID**を主要stable identifierとして使う。
 - audienceはworkload/Role単位で分け、Google token取得とAWS trust policyで完全一致させる。
-- STS `AccessDenied`を直すために `aud` / `oaud` / `sub` conditionを消さない。
-- RoleのAWS permissionsはtrust policyと分離し、least privilegeにする。
-- `sessionName` に人名・メール・顧客ID等を入れない。session/identity情報はCloudTrailへ現れ得る。
+- STS `AccessDenied`を直すために`aud` / `oaud` / `sub` conditionを消さない。
+- Role permissionsはtrust policyと分離し、least privilegeにする。
+- `sessionName`に人名・メール・顧客ID等を入れない。
 
-詳細: [docs/gcp-aws-trust.ja.md](docs/gcp-aws-trust.ja.md)
+詳細は [GCP → AWS trust policy](docs/gcp-aws-trust.ja.md) を参照してください。
 
 ## v0.1 の範囲
 
@@ -183,45 +191,45 @@ AWS service callのretryは `retries` で明示的に有効化できますが、
 
 - GCP metadata service-account ID token
 - Regional AWS STS `AssumeRoleWithWebIdentity`
-- temporary Credentialのcache・期限前refresh
+- temporary credentialのcache・期限前refresh
 - 同時refreshの重複排除
-- Credential取得時のtimeout / bounded retry
+- credential取得時のtimeout / bounded retry
 - signed request送信先のHTTPS host allowlist
 - signed AWS service requestのredirect拒否
 - SigV4 `fetch()`
 - Node.js 22+ / TypeScript
 
-未対応:
+非対応:
 
 - persistent credential storage
 - static AWS access-key auth
+- Google service-account JSON-key fallback
 - local AWS profile / AWS IAM Identity Center
 - proxy/daemon mode
 - automatic IAM provisioning
+- generic secret management
 - browser support
 - signed application service callすべてへの一律timeout
 - non-idempotent AWS requestの自動retry
-- すべてのcloud/provider/AWS partition combinationの暗黙対応
+- 全cloud/provider/AWS partition combinationの暗黙対応
 
-将来的には GitHub Actions / Azure / Kubernetes OIDC 等を同じprovider interfaceへ追加できる構成です。
+endpoint compatibility、provider要件、post-v0.1方向性は [Roadmap](docs/roadmap.ja.md) にまとめています。今後一般化するのは既存interface背後の**workload identity provider**であり、AWS-facing APIを広範なSDK abstractionへ膨らませる方針ではありません。
 
 ## ローカル開発
 
-`gcpMetadataIdentity()` はGoogle metadata serverを利用するため、通常のローカルPCでは動きません。unit testではtest用 `WorkloadIdentityProvider` を注入してください。Cloud Runを再現するためだけにproduction codeへ長期key fallbackを追加する方針ではありません。
+`gcpMetadataIdentity()`はGoogle metadata serverを使うため、通常のローカルPCでは動きません。unit testではtest用`WorkloadIdentityProvider`を注入し、Cloud Run再現のためだけにproduction codeへ長期key fallbackを追加しません。
 
-release-blockingの実Cloud E2E用に `npm run e2e:cloud-run` を用意しています。このcommandはCloud Run revision外では意図的に失敗します。[Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) に従うと、buildpack runtime固定、`AWS_ENDPOINT` host完全一致allowlist、redirect拒否、最終smoke requestのtimeoutまで含めて実行できます。
+release-blockingの実Cloud E2Eには`npm run e2e:cloud-run`を使います。[Cloud Run E2E runbook](docs/cloud-run-e2e.ja.md) に従うと、buildpack runtime固定、`AWS_ENDPOINT` host allowlist、redirect拒否、最終smoke request timeoutまで含めて検証できます。
 
 ## Security
 
-AssumeKit は認証インフラです。production利用前に [セキュリティモデル](docs/security-model.ja.md) を確認してください。
+AssumeKitは認証インフラです。production利用前に [セキュリティモデル](docs/security-model.ja.md) を確認してください。
 
-live token、temporary credential、private key、customer data、PIIをexampleやpublic issueへ貼らないでください。
-
-脆弱性報告は [SECURITY.ja.md](SECURITY.ja.md) を参照してください。
+live token、temporary credential、private key、customer data、PIIをexampleやpublic issueへ貼らないでください。脆弱性報告は [SECURITY.ja.md](SECURITY.ja.md) を参照してください。
 
 ## Contributing
 
-Issue / focused PR を歓迎します。[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
+Issue / focused PRを歓迎します。[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
 
 ## License
 
