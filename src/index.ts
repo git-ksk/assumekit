@@ -180,6 +180,8 @@ export function createAwsFetch(options: CreateAwsFetchOptions): AwsFetch {
   return async (input, init) => {
     validateRequestTarget(input, allowedHosts);
     const aws = await getClient();
-    return aws.fetch(input, init);
+    // A redirect can leave the validated allowlisted origin. Reject all redirects
+    // instead of relying on downstream fetch Authorization-header behavior.
+    return aws.fetch(input, { ...init, redirect: "error" });
   };
 }
