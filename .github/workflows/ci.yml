@@ -26,5 +26,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: node --check scripts/cloud-run-e2e.mjs
       - run: test -f dist/index.js
       - run: npm pack --dry-run
