@@ -18,13 +18,14 @@ At minimum, run:
 
 ```bash
 npm ci
+npm audit --audit-level=high
 npm run typecheck
 npm test
 npm run build
 npm pack --dry-run
 ```
 
-CI validates supported Node.js versions and performs dependency auditing in addition to the commands above.
+CI validates Node.js 22 / 24 with equivalent checks.
 
 ## Do not commit public-repository secrets or private identifiers
 
