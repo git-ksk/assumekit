@@ -6,6 +6,7 @@ function required(name: string): string {
   return value;
 }
 
+const endpoint = new URL(required("AWS_ENDPOINT"));
 const awsFetch = createAwsFetch({
   roleArn: required("AWS_ROLE_ARN"),
   region: required("AWS_REGION"),
@@ -13,9 +14,10 @@ const awsFetch = createAwsFetch({
   identity: gcpMetadataIdentity({
     audience: required("AWS_OIDC_AUDIENCE"),
   }),
+  allowedHosts: [endpoint.host],
 });
 
-const response = await awsFetch(required("AWS_ENDPOINT"));
+const response = await awsFetch(endpoint);
 
 if (!response.ok) {
   throw new Error(`AWS request failed: ${response.status}`);
