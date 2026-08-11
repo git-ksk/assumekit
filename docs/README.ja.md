@@ -10,6 +10,7 @@ AssumeKit は現在、**Google Cloud Run → Google service-account ID token →
 | --- | --- | --- |
 | Project概要 / API | [README](../README.ja.md) | [README](../README.md) |
 | End-to-end設定 | [Cloud Run → AWS セットアップ](getting-started.ja.md) | [Getting started](getting-started.md) |
+| Release前の実Cloud E2E | [Cloud Run E2E runbook](cloud-run-e2e.ja.md) | [Cloud Run E2E runbook](cloud-run-e2e.md) |
 | AWS/GCP trust詳細 | [GCP → AWS trust policy](gcp-aws-trust.ja.md) | [GCP → AWS trust policy](gcp-aws-trust.md) |
 | エラー切り分け | [トラブルシューティング](troubleshooting.ja.md) | [Troubleshooting](troubleshooting.md) |
 | 脅威・境界・非対応 | [セキュリティモデル](security-model.ja.md) | [Security model](security-model.md) |
@@ -23,7 +24,8 @@ AssumeKit は現在、**Google Cloud Run → Google service-account ID token →
 2. [セットアップガイド](getting-started.ja.md) に沿って Cloud Run service identity と AWS IAM Role を構成する。
 3. production accountで使う前に [GCP → AWS trust policy](gcp-aws-trust.ja.md) を確認する。
 4. [セキュリティモデル](security-model.ja.md) で threat boundary と非対応範囲を確認する。
-5. metadata / STS / SigV4 のどこかで失敗したら [トラブルシューティング](troubleshooting.ja.md) で段階的に切り分ける。
+5. 初回npm release前に、release対象commitから [実Cloud Run → AWS E2E runbook](cloud-run-e2e.ja.md) を実行する。
+6. metadata / STS / allowlist / SigV4 / E2E startup のどこかで失敗したら [トラブルシューティング](troubleshooting.ja.md) で段階的に切り分ける。
 
 ## AWS側で混同しやすい2つのPolicy
 

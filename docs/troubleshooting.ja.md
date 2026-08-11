@@ -12,6 +12,9 @@ AssumeKit の認証・通信は3段階に分かれています。IAM policy を�
 
 | 症状 | 失敗箇所 | 最初に確認するもの |
 | --- | --- | --- |
+| `allowedHosts must contain at least one HTTPS request host` | ローカル設定 | scheme/pathを含まない信頼済みhostを1件以上指定したか |
+| `AWS request host is not allowed` | request validation | request URLのhostが `allowedHosts` と完全一致しているか。任意入力を通すためにallowlistを広げない |
+| `AWS request target must use HTTPS` | request validation | HTTPS endpointだけを使用する |
 | `Failed to obtain GCP identity token` | GCP metadata | 本当にCloud Run/Google Cloud上で、意図したservice accountが付いているか |
 | metadata timeout | GCP metadata | runtime環境、metadata access、`serviceAccount` override |
 | STS `InvalidIdentityToken` | AWS STS | audience と trust policy の claim mapping |
@@ -19,6 +22,45 @@ AssumeKit の認証・通信は3段階に分かれています。IAM policy を�
 | AWS側 `403` / `AccessDenied` | AWS service | Role permissions policy |
 | `SignatureDoesNotMatch` | AWS service | SigV4 `service` / region / endpoint |
 | `RegionDisabledException` | AWS STS | 選択リージョンでのSTS利用可否 |
+| Cloud Run E2E revisionがhealthyにならない | Release E2E | Cloud Run logsを確認。AWS request成功までは `$PORT` をlistenしない設計 |
+
+## 署名先validation
+
+### `allowedHosts must contain at least one HTTPS request host`
+
+`allowedHosts` は必須です。各entryにはhost名と必要ならportだけを指定します。
+
+```ts
+allowedHosts: ["example.execute-api.ap-northeast-1.amazonaws.com"]
+```
+
+`https://`、path、query、fragment、URL credentialは含めません。
+
+信頼済み設定のendpointからhostを導出する形が扱いやすく安全です。
+
+```ts
+const endpoint = new URL(process.env.AWS_ENDPOINT!);
+const awsFetch = createAwsFetch({
+  // ...
+  allowedHosts: [endpoint.host],
+});
+```
+
+### `AWS request host is not allowed`
+
+request URLの `host` がallowlistと完全一致していません。このvalidationはworkload credential取得前に走るため、不正な送信先でGoogle token取得やAWS STS交換が始まらない設計です。
+
+確認項目:
+
+- subdomainが違っていないか。
+- portの有無・値が違っていないか。
+- 明示的に信頼していない別endpointを呼んでいないか。
+
+任意user inputを通すためにhostを追加しないでください。`allowedHosts` はcredential pathの制約であり、HTTP method・path・query・payloadへのapplication-level authorizationの代わりではありません。
+
+### `AWS request target must use HTTPS`
+
+署名付きAWS service requestはHTTPSだけを許可します。HTTP targetはcredential取得前にrejectされます。
 
 ## GCP metadata
 
@@ -105,6 +147,24 @@ API Gateway IAM auth の signing service は `execute-api` です。
 AssumeKitはAWS service callのretryをデフォルト `0` にしています。MCP POSTなど非冪等requestを自動再送しないためです。
 
 `retries > 0` を明示する場合は、対象operationが再実行可能か、idempotency mechanismがあることを利用者側で確認してください。
+
+## Release E2E
+
+release E2Eは実Cloud Run **Service** revisionで動かします。コピペ可能なdeploy・確認・cleanup手順は [Cloud Run E2E runbook](cloud-run-e2e.ja.md) を参照してください。
+
+### `K_SERVICE` error
+
+Cloud Run Service revision内でsmoke commandが動いていません。ローカルPCではrelease gateを満たせないよう意図的に失敗します。
+
+### `Cannot find ... dist/index.js`
+
+Cloud Run imageはrepository rootからbuildしてください。projectは `gcp-build` でimage build時に `dist/` を生成し、runtimeのsmoke commandではTypeScript compileを行いません。
+
+### revisionがhealthyにならない
+
+identity chainまたはAWS smoke requestが失敗した場合は想定動作です。E2E processは署名付きAWS request成功後にだけ `0.0.0.0:$PORT` でlistenするため、Cloud Run deployment health check自体がrelease gateの一部になります。
+
+まずService logsを確認し、local validation / metadata / STS / AWS serviceのどこで失敗したかを切り分けてください。起動だけ通すためにhealth挙動を無効化したりIAMを緩めたりしないでください。
 
 ## Credential refresh
 

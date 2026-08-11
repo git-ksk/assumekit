@@ -12,6 +12,9 @@ AssumeKit has three distinct network/authentication stages. Identify which stage
 
 | Symptom | Likely stage | Check first |
 | --- | --- | --- |
+| `allowedHosts must contain at least one HTTPS request host` | Local configuration | Provide one or more exact trusted hosts, without schemes or paths. |
+| `AWS request host is not allowed` | Local request validation | The requested URL host must exactly match an `allowedHosts` entry. Do not widen the allowlist for untrusted input. |
+| `AWS request target must use HTTPS` | Local request validation | Use an HTTPS target only. |
 | `Failed to obtain GCP identity token` | GCP metadata | Is the process actually running on Cloud Run/Google Cloud with the intended service account? |
 | metadata timeout | GCP metadata | Runtime environment, metadata access, custom `serviceAccount` value |
 | STS `InvalidIdentityToken` | AWS STS | audience and Google claim mapping in trust policy |
@@ -19,6 +22,45 @@ AssumeKit has three distinct network/authentication stages. Identify which stage
 | target AWS `403` / `AccessDenied` | AWS service | role permissions policy |
 | `SignatureDoesNotMatch` | AWS service | SigV4 `service`, region, endpoint, request body/headers |
 | `RegionDisabledException` | AWS STS | STS/Region activation for the selected Region |
+| Cloud Run E2E revision never becomes healthy | Release E2E | Read Cloud Run logs; the smoke process intentionally does not listen on `$PORT` until the AWS request succeeds. |
+
+## Signed-target validation
+
+### `allowedHosts must contain at least one HTTPS request host`
+
+`allowedHosts` is required. Each entry must contain only a host name and optional port, for example:
+
+```ts
+allowedHosts: ["example.execute-api.ap-northeast-1.amazonaws.com"]
+```
+
+Do not include `https://`, a path, query string, fragment, or URL credentials.
+
+A convenient safe pattern is to derive the host from a trusted configured endpoint:
+
+```ts
+const endpoint = new URL(process.env.AWS_ENDPOINT!);
+const awsFetch = createAwsFetch({
+  // ...
+  allowedHosts: [endpoint.host],
+});
+```
+
+### `AWS request host is not allowed`
+
+The request URL's `host` does not exactly match the allowlist. This check runs before obtaining workload credentials, so an invalid destination should not trigger Google token or AWS STS activity.
+
+Check for:
+
+- a different subdomain;
+- a missing or unexpected port;
+- accidentally using a second endpoint that was not explicitly trusted.
+
+Do **not** solve this by adding arbitrary user-controlled hosts. `allowedHosts` constrains the credential path; it does not replace application authorization for methods, paths, query parameters, or payloads.
+
+### `AWS request target must use HTTPS`
+
+Signed AWS service requests are HTTPS-only. HTTP targets are rejected before credential acquisition.
 
 ## GCP metadata failures
 
@@ -104,6 +146,24 @@ For API Gateway IAM authorization, the signing service is `execute-api`.
 AssumeKit defaults signed AWS service-call retries to `0` specifically to avoid replaying non-idempotent calls such as POST/MCP requests.
 
 If you explicitly set `retries > 0`, you are responsible for ensuring that replaying the target operation is safe or protected by an idempotency mechanism.
+
+## Release E2E failures
+
+The release E2E intentionally runs in a real Cloud Run **service** revision. See the [Cloud Run E2E runbook](cloud-run-e2e.md) for the copy/paste deployment and cleanup commands.
+
+### `K_SERVICE` error
+
+The smoke command is not running inside a Cloud Run service revision. A local laptop run cannot satisfy the release gate by design.
+
+### `Cannot find ... dist/index.js`
+
+The Cloud Run image must be built from the repository root. The project defines `gcp-build` to produce `dist/` during the image build; the runtime smoke command does not compile TypeScript.
+
+### Revision never becomes healthy
+
+This is expected when the identity chain or AWS smoke request fails. The E2E process starts listening on `0.0.0.0:$PORT` only after the signed AWS request succeeds, so Cloud Run's deployment health check acts as part of the release gate.
+
+Read the service logs first and identify whether the failure is local validation, metadata, STS, or the target AWS service. Do not disable the health behavior or loosen IAM merely to make the revision start.
 
 ## Credential refresh behavior
 

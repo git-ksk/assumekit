@@ -1,5 +1,4 @@
 import { createServer } from "node:http";
-import { createAwsFetch, gcpMetadataIdentity } from "../dist/index.js";
 
 function required(name) {
   const value = process.env[name];
@@ -13,10 +12,17 @@ if (!process.env.K_SERVICE) {
   );
 }
 
+const port = Number.parseInt(process.env.PORT ?? "8080", 10);
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+  throw new Error("PORT must be a valid TCP port.");
+}
+
 const endpoint = new URL(required("AWS_ENDPOINT"));
 if (endpoint.protocol !== "https:") {
   throw new Error("AWS_ENDPOINT must use HTTPS.");
 }
+
+const { createAwsFetch, gcpMetadataIdentity } = await import("../dist/index.js");
 
 const awsFetch = createAwsFetch({
   roleArn: required("AWS_ROLE_ARN"),
@@ -35,11 +41,6 @@ if (!response.ok) {
 }
 
 console.log(`Cloud Run → AWS E2E passed with HTTP ${response.status}.`);
-
-const port = Number.parseInt(process.env.PORT ?? "8080", 10);
-if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-  throw new Error("PORT must be a valid TCP port.");
-}
 
 createServer((_request, serverResponse) => {
   serverResponse.statusCode = 200;

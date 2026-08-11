@@ -19,10 +19,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "gcp-build": "npm run build",
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e:cloud-run": "npm run build && node scripts/cloud-run-e2e.mjs",
+    "e2e:cloud-run": "node scripts/cloud-run-e2e.mjs",
     "prepack": "npm run build"
   },
   "keywords": [
