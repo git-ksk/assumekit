@@ -23,6 +23,7 @@ release条件:
 - gate通過前に初回npm alphaを公開しない。
 - v0.1のproduction identity providerはGoogle metadata identityだけにする。
 - Regional STS、signed-host完全一致allowlist、redirect拒否、bounded credential acquisition、service-call retry default `0` をcompatibility/security propertyとして維持する。
+- 実Cloud Run dogfoodで経路を証明するまではpublic APIを意図的に小さく保つ。
 - static key、IAM auto-provisioning、persistent credential storage、browser auth、proxy/daemon modeはv0.1へ入れない。
 
 ## 対応するSigV4 endpointの考え方
@@ -63,18 +64,21 @@ production providerは少なくとも次を満たす必要があります。
 
 identity sourceを増やしても、AWS-facingな `createAwsFetch()` contractはできるだけ安定させます。
 
-## post-v0.1 provider方向性
+## post-v0.1: demonstrated gapがある場合だけ拡張する
 
-一般化するのは**identity source**であり、AWS-facing APIを膨らませることではありません。実需要と信頼できるE2E環境がある場合だけproviderを追加します。
+provider数をroadmapのKPIにしません。新しいidentity providerは、既存のofficial/provider-native integrationだけではfetch-native use caseに有意なglue、lifecycle管理、security-boundary実装が残り、それをAssumeKitが明確に減らせる場合だけ追加します。
 
-暫定優先順:
+providerを優先する前に、少なくとも次を要求します。
 
-1. GitHub Actions OIDC
-2. provider contractをきれいに満たせるAzure workload identity / managed identity
-3. Kubernetes projected service-account token / workload identity
-4. 同等のsecurity propertyとreal E2E evidenceを持つその他provider
+1. 実際のuser/workload needがdocumentされている。
+2. そのplatformの成熟したfirst-party/official integrationと比較している。
+3. generic credential chainにならず、AssumeKitが埋めるgapを明確に説明できる。
+4. 上記provider contractを満たす。
+5. production-supportedと表現する前に信頼できるreal-cloud E2E環境がある。
 
-これは方向性であり、release時期の約束ではありません。
+Azure workload identity、Kubernetes projected service-account token、その他workload identityは、これらの条件を満たした場合に候補になり得ます。**GitHub Actions OIDCを自動的な次ターゲットにはしません**。GitHub → AWSには成熟したofficial integrationが既にあるため、それらでは埋まらない具体的なfetch-native gapが示された場合だけprovider追加を検討します。
+
+固定provider checklistではなく、gap/demand-drivenな拡張を優先します。一般化するのは**identity source**であり、AWS-facing APIを膨らませることではありません。
 
 ## 明示的なnon-goal
 
@@ -82,6 +86,7 @@ AssumeKitを次の方向へ広げません。
 
 - static AWS access-key fallback
 - Google service-account JSON key loader
+- generic multi-source credential chain
 - IAM Role/Policy provisioner
 - generic secret manager
 - persistent credential storage
