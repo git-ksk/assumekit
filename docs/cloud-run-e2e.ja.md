@@ -51,15 +51,16 @@ gcloud run deploy "$E2E_SERVICE" \
   --project "$GCP_PROJECT_ID" \
   --region "$GCP_REGION" \
   --service-account "$GCP_SERVICE_ACCOUNT_EMAIL" \
+  --set-build-env-vars "GOOGLE_NODEJS_VERSION=24.x.x" \
   --command npm \
   --args run,e2e:cloud-run \
   --no-allow-unauthenticated \
   --set-env-vars "AWS_ROLE_ARN=${AWS_ROLE_ARN},AWS_REGION=${AWS_REGION},AWS_SERVICE=${AWS_SERVICE},AWS_OIDC_AUDIENCE=${AWS_OIDC_AUDIENCE},AWS_ENDPOINT=${AWS_ENDPOINT}"
 ```
 
-Dockerfileが無いこのrepositoryをCloud Runへsource deployするとGoogle Cloud buildpacksが使われます。AssumeKitは `gcp-build` でimage build時に `dist/` を生成し、runtimeのE2E commandはsmoke testだけを実行します。runtimeにTypeScript compilerが残っていることへ依存しません。
+Dockerfileが無いこのrepositoryをCloud Runへsource deployするとGoogle Cloud buildpacksが使われます。E2Eではbuildpack runtimeを `GOOGLE_NODEJS_VERSION=24.x.x` でNode.js 24系へ固定し、package側の広いnpm互換範囲にruntime選択を任せません。AssumeKitは `gcp-build` でimage build時に `dist/` を生成し、runtimeのE2E commandはsmoke testだけを実行します。runtimeにTypeScript compilerが残っていることへ依存しません。
 
-Cloud Run通常のdeployment health checkをそのまま利用できます。E2E processはAWS request成功後まで `0.0.0.0:$PORT` をlistenしないため、metadata・STS・署名・allowlist・対象AWS serviceのどこかで失敗するとrevisionはhealthyになりません。
+Cloud Run通常のdeployment health checkをそのまま利用できます。E2E processはAWS request成功後まで `0.0.0.0:$PORT` をlistenしないため、metadata・STS・署名・allowlist・redirect・timeout・対象AWS serviceのどこかで失敗するとrevisionはhealthyになりません。最後のAWS smoke requestは15秒で打ち切り、signed service redirectは拒否します。
 
 ## 3. 成功を確認する
 
@@ -84,7 +85,8 @@ release gateを閉じる前に次を全部確認します。
 - 実metadata token取得が成功した。
 - Regional STS `AssumeRoleWithWebIdentity` が成功した。
 - SigV4 HTTPS requestは設定した `AWS_ENDPOINT` の完全一致hostだけへ送られた。
-- 対象AWS endpointが成功HTTP statusを返した。
+- service redirectを追従していない。
+- 対象AWS endpointが15秒のsmoke上限内に成功HTTP statusを返した。
 - application logにGoogle ID token、AWS temporary credential、Authorization headerが出ていない。
 - AWS CloudTrailで意図した `AssumeRoleWithWebIdentity` のRole/session経路を確認でき、想定外identityがない。
 
@@ -109,8 +111,11 @@ gcloud run services delete "$E2E_SERVICE" \
 | --- | --- |
 | `K_SERVICE` error | Cloud Run Service revision内で実行されていない。 |
 | `Cannot find ... dist/index.js` | repository rootからbuildされていない、または `gcp-build` が完了していない。 |
+| Node/buildpack version error | build environmentに `GOOGLE_NODEJS_VERSION=24.x.x` が入っているか確認する。 |
 | `AWS_ENDPOINT must use HTTPS` | HTTPS endpointだけを設定する。 |
 | signed request host / `allowedHosts` error | `AWS_ENDPOINT` がsmoke testで想定する完全一致hostではない。任意入力を通すためにallowlistを広げない。 |
+| redirect error | 対象がredirectを返している。redirect追従を有効化せず、最終canonical AWS HTTPS endpointを設定する。 |
+| request abort/timeout | 対象が15秒以内に応答していない。上限を外すのではなくendpoint health/networkingを確認する。 |
 | metadata error/timeout | revision service accountとGoogle metadata availabilityを確認する。 |
 | STS `InvalidIdentityToken` / `AccessDenied` | `aud` / `oaud` / `sub`、audience、Role ARNを確認する。テストを通すためにtrust policyを緩めない。 |
 | target `403` / `AccessDenied` | federation trustではなくassumed Roleのpermissions policyを確認する。 |
