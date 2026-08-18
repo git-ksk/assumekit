@@ -2,15 +2,16 @@
 
 [English documentation](README.md)
 
-AssumeKit は現在、**Google Cloud Run → Google service-account ID token → AWS STS → temporary AWS credentials → constrained SigV4 HTTP request** の経路を中心に実装・検証しています。
+AssumeKit は薄い **multi-cloud workload identity → constrained AWS access bridge** です。現在は最初のproduction reference pathとして、**Google Cloud Run → Google service-account ID token → AWS STS → temporary AWS credentials → constrained SigV4 HTTP request** を完全に証明することへ集中しています。
 
-基礎となるfederation mechanism自体は標準技術です。AssumeKitはworkload identity、credential exchange、lifecycle管理、fetch-style SigV4 interfaceをまとめる薄いsecurity-opinionated application layerです。
+基礎となるfederation mechanism自体は標準技術です。AssumeKitはworkload identity、credential exchange、lifecycle管理、fetch-style SigV4 interfaceを、保守的なsecurity boundaryとともにまとめます。Cloud Runは最初のreference implementationであり、恒久的なproduct boundaryではありません。
 
 ## まず読むもの
 
 | 内容 | 日本語 | English |
 | --- | --- | --- |
 | Project概要 / API | [README](../README.ja.md) | [README](../README.md) |
+| Multi-cloud product positioning | [ポジショニング](multicloud-positioning.ja.md) | [Positioning](multicloud-positioning.md) |
 | Roadmap / provider compatibility contract | [Roadmap](roadmap.ja.md) | [Roadmap](roadmap.md) |
 | End-to-end設定 | [Cloud Run → AWS セットアップ](getting-started.ja.md) | [Getting started](getting-started.md) |
 | Release前の実Cloud E2E | [Cloud Run E2E runbook](cloud-run-e2e.ja.md) | [Cloud Run E2E runbook](cloud-run-e2e.md) |
@@ -25,13 +26,14 @@ AssumeKit は現在、**Google Cloud Run → Google service-account ID token →
 ## 推奨順序
 
 1. [日本語README](../README.ja.md) で目的、API、隣接approachとの違いを確認する。
-2. [Roadmap](roadmap.ja.md) でv0.1 boundary、SigV4 endpointのcompatibility前提、provider security contractを確認する。
-3. [セットアップガイド](getting-started.ja.md) に沿って Cloud Run service identity と AWS IAM Role を構成する。
-4. production accountで使う前に [GCP → AWS trust policy](gcp-aws-trust.ja.md) を確認する。
-5. [セキュリティモデル](security-model.ja.md) で threat boundary と非対応範囲を確認する。
-6. 初回npm release前に、release対象commitから [実Cloud Run → AWS E2E runbook](cloud-run-e2e.ja.md) を実行する。
-7. [Release手順](releasing.ja.md) に沿って、初回npm bootstrapと2回目以降のOIDC Trusted Publishingを実施する。
-8. metadata / STS / allowlist / SigV4 / E2E startup のどこかで失敗したら [トラブルシューティング](troubleshooting.ja.md) で段階的に切り分ける。
+2. [Multi-cloud product positioning](multicloud-positioning.ja.md) で長期product boundary、競合との境界、provider選定policyを確認する。
+3. [Roadmap](roadmap.ja.md) でv0.1 boundary、SigV4 endpointのcompatibility前提、provider security contractを確認する。
+4. [セットアップガイド](getting-started.ja.md) に沿って Cloud Run service identity と AWS IAM Role を構成する。
+5. production accountで使う前に [GCP → AWS trust policy](gcp-aws-trust.ja.md) を確認する。
+6. [セキュリティモデル](security-model.ja.md) で threat boundary と非対応範囲を確認する。
+7. 初回npm release前に、release対象commitから [実Cloud Run → AWS E2E runbook](cloud-run-e2e.ja.md) を実行する。
+8. [Release手順](releasing.ja.md) に沿って、初回npm bootstrapと2回目以降のOIDC Trusted Publishingを実施する。
+9. metadata / STS / allowlist / SigV4 / E2E startup のどこかで失敗したら [トラブルシューティング](troubleshooting.ja.md) で段階的に切り分ける。
 
 ## AWS側で混同しやすい2つのPolicy
 
@@ -59,6 +61,8 @@ Role ARN、region、SigV4 service name、audience等は認証secretそのもの�
 AssumeKit は **early alpha** です。
 
 repositoryとdocumentationは設計review・実装review・testに使用できますが、packageはまだnpmへ公開していません。初回npm releaseは実 Cloud Run → AWS end-to-end testが完了するまで意図的に止めています。
+
+multi-cloud positioningを定義してもv0.1のscopeは広げません。release gateを通過するまではCloud Runが唯一のproduction-supported identity pathです。post-v0.1のprovider選定は別管理とし、provider数ではなく実際のneed/gapを基準にします。
 
 ## 日本語版の扱い
 
